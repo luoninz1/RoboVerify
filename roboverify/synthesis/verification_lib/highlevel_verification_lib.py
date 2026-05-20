@@ -8,6 +8,7 @@ from z3 import (
     Consts,
     DeclareSort,
     EnumSort,
+    Exists,
     ForAll,
     Function,
     If,
@@ -42,6 +43,7 @@ class HighLevelContext:
         num_goals: Optional[int] = None,
         goal_enum_names: Optional[List[str]] = None,
         use_tbl: bool = False,
+        exists_top: bool = False,
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
         verification_mode: str = "box",
@@ -52,6 +54,7 @@ class HighLevelContext:
         self.num_goals = num_goals
         self.goal_enum_names = goal_enum_names
         self.use_tbl = use_tbl
+        self.exists_top = exists_top
         self.visualize_enum_scene = visualize_enum_scene
         self.visualization_prefix = visualization_prefix
         self.verification_mode = verification_mode
@@ -166,6 +169,15 @@ class HighLevelContext:
             ),
             "higher3",
         )
+        if self.use_tbl:
+            tbl = self.get_consts("tbl")
+            s.assert_and_track(
+                ForAll(
+                    [x],
+                    Implies(Or(self.Higher(x, tbl), self.Higher(tbl, x)), x == tbl),
+                ),
+                "higher_tbl",
+            )
 
     def add_axiom_scattered(self, s: Solver):
         x, y, c = Consts("x y c", self.BoxSort)
@@ -299,6 +311,13 @@ class HighLevelContext:
             "nested_2",
         )
 
+        # global reachability axiom
+        h = Const("h", self.GoalSort)
+        s.assert_and_track(
+            ForAll([x], Implies(x != self.null, self._dr_reach(h, x))),
+            "dr_reach",
+        )
+
     def _f_plus(self, rel, a, b):
         return And(rel(a, b), a != b)
 
@@ -400,6 +419,20 @@ class HighLevelContext:
                 ),
                 "on_tbl",
             )
+        if self.exists_top:
+            s.assert_and_track(
+                ForAll(
+                    [x],
+                    Exists(
+                        [y],
+                        And(
+                            ForAll([c], Implies(self.ON_star(c, y), c == y)),
+                            self.ON_star(y, x),
+                        ),
+                    ),
+                ),
+                "on_exists_top",
+            )
 
     def add_axiom_on_star_zero(self, s: Solver):
         x, y, c = Consts("x y c", self.BoxSort)
@@ -454,6 +487,20 @@ class HighLevelContext:
                     ),
                 ),
                 "on_zero_tbl",
+            )
+        if self.exists_top:
+            s.assert_and_track(
+                ForAll(
+                    [x],
+                    Exists(
+                        [y],
+                        And(
+                            ForAll([c], Implies(self.ON_star_zero(c, y), c == y)),
+                            self.ON_star_zero(y, x),
+                        ),
+                    ),
+                ),
+                "on_zero_exists_top",
             )
 
     def _print_relation_table(self, model, relation, relation_name: str):

@@ -90,6 +90,7 @@ class TestBmcStackingProgram(unittest.TestCase):
     def test_bmc_sat_stacking_goal(self):
         prog = self._program()
         infer_block_layout(prog)
+
         # pick(1): gripper over block 1 at t=0
         def make_init(sym):
             return default_table_initial_state(
@@ -254,9 +255,7 @@ class TestBmcStackingProgramByName(unittest.TestCase):
         return [
             PickByName("b_prime"),
             MoveByName("b", "b", "b_prime", target_offset=[0.0, 0.0, 1.0]),
-            MoveByName(
-                "b_prime", "b_prime", "b_prime", target_offset=[0.0, 0.0, 1.0]
-            ),
+            MoveByName("b_prime", "b_prime", "b_prime", target_offset=[0.0, 0.0, 1.0]),
             MoveByName(
                 "b_prime",
                 "b_prime",

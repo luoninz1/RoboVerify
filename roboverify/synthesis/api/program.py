@@ -18,6 +18,8 @@ from z3 import (
     is_app,
     is_false,
     is_implies,
+    is_not,
+    is_or,
     is_quantifier,
     is_true,
     sat,
@@ -44,6 +46,26 @@ from synthesis.api.instructions import (
     Skip,
     While,
 )
+
+
+def _outer_while_direct_body_move_down_var(
+    instructions: List[Instruction],
+) -> Optional[str]:
+    """
+    For nested goal programs, return the ``var_name`` of ``MoveDown`` in the
+    *first* top-level ``While``'s *direct* body (last such instruction wins).
+
+    Used for VC diagnosis: preserve obligations use ``wp(MoveDown(x), inv)`` on
+    each outer conjunct, not the raw conjunct at the pre-step state.
+    """
+    for inst in instructions:
+        if isinstance(inst, While):
+            last: Optional[str] = None
+            for b in inst.body:
+                if isinstance(b, MoveDown):
+                    last = b.var_name
+            return last
+    return None
 
 
 def _sexpr_trunc(expr, max_len: int = 420) -> str:
@@ -103,9 +125,16 @@ def _tri_goal_forall_by_finite_expansion(
     return "true"
 
 
-def _tri_status_under_model(
-    model, expr, solver=None, _depth: int = 0
-) -> str:
+def _flatten_or(expr):
+    if is_or(expr):
+        out: List = []
+        for ch in expr.children():
+            out.extend(_flatten_or(ch))
+        return out
+    return [expr]
+
+
+def _tri_status_under_model(model, expr, solver=None, _depth: int = 0) -> str:
     """
     Whether ``expr`` holds in ``model``: 'true', 'false', or 'unknown'.
 
@@ -113,12 +142,70 @@ def _tri_status_under_model(
     ``ForAll`` over Goal is decided by enumerating all tuples (finite expansion),
     so Z3 does not need to reduce the quantifier node to a Boolean constant.
     """
+    try:
+        expr = simplify(expr)
+    except Exception:
+        pass
+
     if (
         solver is not None
         and _depth < _MAX_FINITE_FORALL_DIAG_DEPTH
         and _is_goal_only_forall(solver, expr)
     ):
         return _tri_goal_forall_by_finite_expansion(model, solver, expr, _depth)
+
+    # ``wp(MoveDown(i), Q)`` is ``And(i != null, ForAll z. ...)``. ``model.eval`` on the
+    # whole ``And`` often stays non-Boolean when ``dtot`` expands under ``z``; peel
+    # conjuncts so inner ``ForAll`` over Goal still gets finite expansion.
+    if solver is not None and _depth < _MAX_FINITE_FORALL_DIAG_DEPTH and is_and(expr):
+        chs = _flatten_and(expr)
+        if len(chs) > 1:
+            saw_unknown = False
+            for ch in chs:
+                st = _tri_status_under_model(model, ch, solver, _depth + 1)
+                if st == "false":
+                    return "false"
+                if st == "unknown":
+                    saw_unknown = True
+            return "unknown" if saw_unknown else "true"
+
+    # Finite boolean structure (common under Goal ForAll bodies, e.g. ``Implies(dtot, …)``).
+    if solver is not None and _depth < _MAX_FINITE_FORALL_DIAG_DEPTH:
+        if is_implies(expr):
+            a, b = expr.arg(0), expr.arg(1)
+            st_b = _tri_status_under_model(model, b, solver, _depth + 1)
+            if st_b == "true":
+                return "true"
+            st_a = _tri_status_under_model(model, a, solver, _depth + 1)
+            if st_a == "false":
+                return "true"
+            if st_a == "true":
+                return st_b
+            return "unknown"
+        if is_not(expr):
+            st = _tri_status_under_model(model, expr.arg(0), solver, _depth + 1)
+            if st == "true":
+                return "false"
+            if st == "false":
+                return "true"
+            return "unknown"
+        if is_or(expr):
+            chs = _flatten_or(expr)
+            if len(chs) > 1:
+                saw_unknown = False
+                any_true = False
+                for ch in chs:
+                    st = _tri_status_under_model(model, ch, solver, _depth + 1)
+                    if st == "true":
+                        any_true = True
+                        break
+                    if st == "unknown":
+                        saw_unknown = True
+                if any_true:
+                    return "true"
+                if saw_unknown:
+                    return "unknown"
+                return "false"
 
     v = simplify(model.eval(expr, True))
     if is_true(v):
@@ -179,11 +266,16 @@ def print_where_conclusion_fails(
     conclusion,
     max_lines: int = 96,
     max_conjuncts_to_list: int = 64,
+    outer_move_down_var: Optional[str] = None,
 ) -> None:
     """
     When VC check-2 is SAT, the model satisfies premise ∧ ¬conclusion, so ``conclusion``
     is false. Flatten nested And, then report each conjunct that is false (or unknown)
     under the model; drill into Implies / nested And / Goal ForAll when possible.
+
+    When ``outer_move_down_var`` is set and the solver carries ``_learned_clause_provenance``,
+    also print per-conjunct ``wp(MoveDown(outer_move_down_var), C)`` under the model
+    (same encoding as ``wp()`` in this module), instead of evaluating raw ``C`` at the CE.
     """
     state = {"n": 0}
 
@@ -249,7 +341,11 @@ def print_where_conclusion_fails(
                 walk(chs[i], f"{path}/[{i}]")
             return
 
-        if is_quantifier(expr) and expr.is_forall() and getattr(solver, "GoalSort", None):
+        if (
+            is_quantifier(expr)
+            and expr.is_forall()
+            and getattr(solver, "GoalSort", None) is not None
+        ):
             wit = _forall_goal_find_falsifying_witness(solver, model, expr)
             if wit is not None:
                 tup, inst = wit
@@ -333,7 +429,9 @@ def print_where_conclusion_fails(
             wit = _forall_goal_find_falsifying_witness(solver, model, p)
             if wit is not None:
                 tup, inst = wit
-                emit(f"    -> ForAll broken at Goal witness {tup}; body: {_sexpr_trunc(inst, 300)}")
+                emit(
+                    f"    -> ForAll broken at Goal witness {tup}; body: {_sexpr_trunc(inst, 300)}"
+                )
         listed += 1
     if len(bad_rows) > listed:
         emit(
@@ -341,30 +439,64 @@ def print_where_conclusion_fails(
             f"raise max_conjuncts_to_list={max_conjuncts_to_list})"
         )
 
-    # Robust provenance report by *index in provenance list* (no expr matching).
     provs = getattr(solver, "_learned_clause_provenance", []) or []
-    if provs:
-        emit("[diagnosis] learned-clause provenance (indexed list; evaluated in model):")
-        shown = 0
+    if provs and outer_move_down_var and getattr(solver, "GoalSort", None) is not None:
+        emit(
+            "[diagnosis] outer invariant by conjunct: "
+            f"wp(MoveDown({outer_move_down_var!r}), C_j) under the CE model "
+            "(library wp / ctx.dtot; same as synthesis.api.program.wp for MoveDown)."
+        )
+        n_wp_true = n_wp_false = n_wp_unk = 0
         for j, c in enumerate(provs):
-            if state["n"] >= max_lines:
+            expr = getattr(c, "expr", None)
+            if expr is None:
+                continue
+            obl = _wp_move_down_on_goal_var(expr, solver, outer_move_down_var)
+            st_wp = _tri_status_under_model(model, obl, solver)
+            if st_wp == "true":
+                n_wp_true += 1
+            elif st_wp == "false":
+                n_wp_false += 1
+            else:
+                n_wp_unk += 1
+        emit(
+            f"  {len(provs)} provenance conjunct(s): "
+            f"wp holds (true) on {n_wp_true}, false on {n_wp_false}, unknown on {n_wp_unk}."
+        )
+        shown_wp = 0
+        for j, c in enumerate(provs):
+            if state["n"] >= max_lines or shown_wp >= max_conjuncts_to_list:
                 break
             expr = getattr(c, "expr", None)
             if expr is None:
                 continue
-            stj = _tri_status_under_model(model, expr, solver)
-            if stj == "true":
+            obl = _wp_move_down_on_goal_var(expr, solver, outer_move_down_var)
+            st_wp = _tri_status_under_model(model, obl, solver)
+            if st_wp == "true":
                 continue
             emit(
-                f"  prov[{j}] ({stj}): "
+                f"  outer_inv[{j}] wp→({st_wp}): "
                 f"omega_index={getattr(c, 'omega_index', None)} "
                 f"target={getattr(c, 'target_predicate', None)} "
                 f"via={getattr(c, 'learned_via', None)} "
-                f"expr={_sexpr_trunc(expr, 220)}"
+                f"wp_obl={_sexpr_trunc(obl, 220)}"
             )
-            shown += 1
-            if shown >= max_conjuncts_to_list:
-                break
+            shown_wp += 1
+        failing_wp = n_wp_false + n_wp_unk
+        if failing_wp > shown_wp:
+            emit(
+                f"  ... ({failing_wp - shown_wp} more false/unknown wp row(s) not shown; "
+                f"raise max_conjuncts_to_list={max_conjuncts_to_list})"
+            )
+    elif (
+        provs
+        and getattr(solver, "GoalSort", None) is not None
+        and not outer_move_down_var
+    ):
+        emit(
+            "[diagnosis] outer invariant provenance present but no MoveDown in the first "
+            "While's direct body — skipping wp-per-conjunct table."
+        )
     emit("[diagnosis] structured walk (nested detail):")
     walk(conclusion, "conclusion")
 
@@ -420,6 +552,108 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
     # Case 3: Constants, bound variables, etc.
     else:
         return expr
+
+
+def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
+    """Weakest-precondition rewrite for ON_star after put(upper, tbl).
+
+    Matches highlevel/test_unstack_single_tower_b0_bottom_exists_top_inferred.py
+    ``wp_for_put_on_tbl`` / ``ON_func_substituted``:
+
+        ON'(alpha, beta) =
+            ON(alpha, beta) ∧ (¬ON(alpha, b_prime) ∨ ON(beta, b_prime))
+
+    No acyclicity guard (unlike put on a box).
+    """
+    if is_quantifier(expr):
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+        body = expr.body()
+        rewritten_body = rewrite_for_put_on_tbl_for_ON_star(body, b_prime, context)
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        return Exists(
+            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+            rewritten_body,
+        )
+
+    if is_app(expr):
+        decl = expr.decl()
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "ON_star":
+            alpha, beta = expr.children()
+            return And(
+                context.ON_star(alpha, beta),
+                Or(
+                    Not(context.ON_star(alpha, b_prime)),
+                    context.ON_star(beta, b_prime),
+                ),
+            )
+        new_children = [
+            rewrite_for_put_on_tbl_for_ON_star(c, b_prime, context)
+            for c in expr.children()
+        ]
+        return decl(*new_children)
+
+    return expr
+
+
+def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context):
+    """Weakest-precondition rewrite for Higher after put(placed_block, tbl).
+
+    Parallel to ``rewrite_for_put_on_tbl_for_ON_star`` / ``ON_func_substituted``:
+
+        Higher'(m, n) =
+            Higher(m, n) ∧ (¬Higher(m, placed_block) ∨ Higher(n, placed_block))
+
+    For ``Put("b", "tbl")``, ``placed_block`` is the constant for ``b``.
+    """
+    if is_quantifier(expr):
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+        body = expr.body()
+        rewritten_body = rewrite_for_put_on_tbl_for_Higher(body, placed_block, context)
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        return Exists(
+            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+            rewritten_body,
+        )
+
+    if is_app(expr):
+        decl = expr.decl()
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
+            m, n = expr.children()
+            t = Const("t", context.BoxSort)
+            tbl = Const("tbl", context.BoxSort)
+            return Or(
+                And(m == placed_block, n == placed_block),
+                And(m != placed_block, n != placed_block, context.Higher(m, n)),
+                And(
+                    m == placed_block,
+                    n != placed_block,
+                    ForAll([t], Implies(t != tbl, context.Higher(t, n))),
+                ),
+                And(m != placed_block, n == placed_block, n != tbl),
+            )
+        new_children = [
+            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context)
+            for c in expr.children()
+        ]
+        return decl(*new_children)
+
+    return expr
+
+
+def _put_base_is_tbl(seq_instruction: Put) -> bool:
+    return seq_instruction.base_block == "tbl"
 
 
 def rewrite_for_put_for_higher(expr, b_prime, b, context):
@@ -699,6 +933,7 @@ class Program:
                 prov_clauses.extend(inst.invariant_provenance)
         setattr(solver, "_learned_clause_provenance", prov_clauses)
         vcs = self.VC_gen(P, Q, solver)
+        outer_md_var = _outer_while_direct_body_move_down_var(self.instructions)
         ok = True
 
         img_dir: Optional[Path] = None
@@ -773,7 +1008,12 @@ class Program:
                     ok = False
                     print(f"[FAIL] VC {idx} check 2 returned {check2}; expected unsat")
                     if check2 == sat and model2 is not None:
-                        print_where_conclusion_fails(solver, model2, conclusion)
+                        print_where_conclusion_fails(
+                            solver,
+                            model2,
+                            conclusion,
+                            outer_move_down_var=outer_md_var,
+                        )
                     save_goal_counterexample_on_failure(f"vc_{idx}_check2", model2)
             else:
                 print(
@@ -841,6 +1081,7 @@ def to_seq(instructions):
 
 def wp(seq_instruction, Q, context):
     """calculate weakest precondition"""
+
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
         if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
@@ -887,8 +1128,13 @@ def wp(seq_instruction, Q, context):
             ForAll([z], Implies(context.dtot(curr, z), substitute(Q, (curr, z)))),
         )
     elif isinstance(seq_instruction, Put):
-        b_prime = context.get_consts(seq_instruction.upper_block)
+        placed = context.get_consts(seq_instruction.upper_block)
+        if _put_base_is_tbl(seq_instruction):
+            # put(upper, tbl): e.g. Put("b", "tbl") places block b on the table.
+            Q = rewrite_for_put_on_tbl_for_ON_star(Q, placed, context)
+            return rewrite_for_put_on_tbl_for_Higher(Q, placed, context)
         b = context.get_consts(seq_instruction.base_block)
+        b_prime = placed
         Q = And(
             Not(context.ON_star(b, b_prime)),
             rewrite_for_put_for_ON_star(Q, b_prime, b, context),
@@ -900,8 +1146,16 @@ def wp(seq_instruction, Q, context):
     ), f"Unrecognized seq instruction {type(seq_instruction)} to calculate wp"
 
 
+def _wp_move_down_on_goal_var(
+    post, context: highlevel_verification_lib.HighLevelContext, var_name: str
+):
+    """``wp(MoveDown(var_name), post, context)`` — single-step MoveDown as in ``wp()`` above."""
+    return wp(MoveDown(var_name), post, context)
+
+
 def VC_aux(seq_instruction, Q, context) -> List:
     """generate auxiliary verification conditions"""
+
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
         if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
@@ -917,10 +1171,19 @@ def VC_aux(seq_instruction, Q, context) -> List:
             to_seq(seq_instruction.body), inv_expr(seq_instruction.invariant), context
         ) + [
             Implies(
-                And(seq_instruction.instantiated_cond, inv_expr(seq_instruction.invariant)),
-                wp(to_seq(seq_instruction.body), inv_expr(seq_instruction.invariant), context),
+                And(
+                    seq_instruction.instantiated_cond,
+                    inv_expr(seq_instruction.invariant),
+                ),
+                wp(
+                    to_seq(seq_instruction.body),
+                    inv_expr(seq_instruction.invariant),
+                    context,
+                ),
             ),
-            Implies(And(Not(seq_instruction.cond), inv_expr(seq_instruction.invariant)), Q),
+            Implies(
+                And(Not(seq_instruction.cond), inv_expr(seq_instruction.invariant)), Q
+            ),
         ]
     elif isinstance(seq_instruction, Instruction):
         return []

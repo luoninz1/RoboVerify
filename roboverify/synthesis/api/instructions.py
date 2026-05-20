@@ -681,7 +681,11 @@ class While(Instruction):
         # Optional structured provenance for learned invariants:
         # list of objects with attribute `.expr` (z3.ExprRef) and metadata.
         self.invariant_provenance = (
-            list(invariant) if isinstance(invariant, list) and invariant and hasattr(invariant[0], "expr") else None
+            list(invariant)
+            if isinstance(invariant, list)
+            and invariant
+            and hasattr(invariant[0], "expr")
+            else None
         )
 
     def _get_num_blocks(self, env, obs) -> int:

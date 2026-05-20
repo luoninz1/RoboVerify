@@ -13,12 +13,14 @@ from synthesis.util import on
 
 z3.set_option("smt.core.minimize", "true")
 
+
 @dataclass(frozen=True)
 class ProvenancedClause:
     expr: z3.ExprRef
     omega_index: int
     target_predicate: str
     learned_via: str  # "phi" or "phi_prime"
+
 
 # Above this many selected predicates, SymPy POSform minimization is too slow;
 # build an unminimized POS (CNF) by one maxterm per rejected assignment instead.
@@ -1267,8 +1269,14 @@ def loop_inference_by_index(
     )
     print("phi_selected_idxs", phi_selected_idxs)
     print("selected_phi_omega", selected_phi_omega)
-    print("project_to_selected(full_U, phi_selected_idxs)", project_to_selected(full_U, phi_selected_idxs))
-    print("project_to_selected(reduced_S, phi_selected_idxs)", project_to_selected(reduced_S, phi_selected_idxs))
+    print(
+        "project_to_selected(full_U, phi_selected_idxs)",
+        project_to_selected(full_U, phi_selected_idxs),
+    )
+    print(
+        "project_to_selected(reduced_S, phi_selected_idxs)",
+        project_to_selected(reduced_S, phi_selected_idxs),
+    )
     print("phi_new (POS for ~target => phi_new)", phi_new_pos)
     z3_phi_new_pos = sympy_to_z3(phi_new_pos, z3_terms=selected_phi_omega)
     print("z3_phi_new_pos", z3_phi_new_pos)
@@ -1293,7 +1301,6 @@ def loop_inference_by_index(
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
-
     # learn phi_prime in target => phi_prime
     phi_prime_selected_idxs = learn_from_partition(full_S, reduced_U)
     selected_phi_prime_omega = [reduced_omega[i] for i in phi_prime_selected_idxs]
@@ -1306,8 +1313,14 @@ def loop_inference_by_index(
     )
     print("phi_prime_selected_idxs", phi_prime_selected_idxs)
     print("selected_phi_prime_omega", selected_phi_prime_omega)
-    print("project_to_selected(full_S, phi_prime_selected_idxs)", project_to_selected(full_S, phi_prime_selected_idxs))
-    print("project_to_selected(reduced_U, phi_prime_selected_idxs)", project_to_selected(reduced_U, phi_prime_selected_idxs))
+    print(
+        "project_to_selected(full_S, phi_prime_selected_idxs)",
+        project_to_selected(full_S, phi_prime_selected_idxs),
+    )
+    print(
+        "project_to_selected(reduced_U, phi_prime_selected_idxs)",
+        project_to_selected(reduced_U, phi_prime_selected_idxs),
+    )
     print("phi_prime", phi_prime)
     z3_phi_prime = sympy_to_z3(phi_prime, z3_terms=selected_phi_prime_omega)
     print("z3_phi_prime", z3_phi_prime)
@@ -1489,10 +1502,7 @@ def loop_inference_2d(
     print(filtered_invariants)
 
     final_result = z3.And(
-        *[
-            (c.expr if hasattr(c, "expr") else c)
-            for c in filtered_invariants
-        ]
+        *[(c.expr if hasattr(c, "expr") else c) for c in filtered_invariants]
     )
     print("final result", final_result)
     return final_result, filtered_invariants
@@ -1559,7 +1569,9 @@ def loop_inference(
     print("filtered candidates", len(filtered_invariants))
     print(filtered_invariants)
 
-    final_result = z3.And(*filtered_invariants)
+    final_result = z3.And(
+        *[(c.expr if hasattr(c, "expr") else c) for c in filtered_invariants]
+    )
     print("final result", final_result)
 
     print("checking equivalent with ground truth")
@@ -1577,12 +1589,12 @@ def loop_inference(
         (fresh,) = z3.Consts("fresh", active_context.BoxSort)
         return z3.ForAll([fresh], active_context.Higher(fresh, x))
 
-    desired = z3.Not(
-        z3.Implies(
-            z3.And(on_table(x), on_table(y), x != y), active_context.Scattered(x, y)
-        )
-    )
-    solver.assert_and_track(desired, "desired")
+    # desired = z3.Not(
+    #     z3.Implies(
+    #         z3.And(on_table(x), on_table(y), x != y), active_context.Scattered(x, y)
+    #     )
+    # )
+    # solver.assert_and_track(desired, "desired")
     # solver.check()
     # print("model is")
     # print(solver.model())
@@ -1736,33 +1748,34 @@ def loop_inference(
     #     "original_4"
     # )
 
-    for idx, candidate in enumerate(filtered_invariants):
-        solver.assert_and_track(candidate, f"term{idx}")
-        print(f"term{idx}:", candidate)
-    print(solver.check())
-    print("Unsat Core:", solver.unsat_core())
-    if solver.check() == z3.sat:
-        print("constraints satisfiable")
-        print("model is")
-        print(solver.model())
-        blocks = [b9, b10, b11, b12]
-        names = ["b9", "b10", "b11", "b12"]
+    # for idx, candidate in enumerate(filtered_invariants):
+    #     cand_expr = candidate.expr if hasattr(candidate, "expr") else candidate
+    #     solver.assert_and_track(cand_expr, f"term{idx}")
+    #     print(f"term{idx}:", cand_expr)
+    # print(solver.check())
+    # print("Unsat Core:", solver.unsat_core())
+    # if solver.check() == z3.sat:
+    #     print("constraints satisfiable")
+    #     print("model is")
+    #     print(solver.model())
+    #     blocks = [b9, b10, b11, b12]
+    #     names = ["b9", "b10", "b11", "b12"]
 
-        start_state = extract_direct_on(
-            solver.model(), blocks, names, active_context.ON_star_zero
-        )
-        current_state = extract_direct_on(
-            solver.model(), blocks, names, active_context.ON_star
-        )
+    #     start_state = extract_direct_on(
+    #         solver.model(), blocks, names, active_context.ON_star_zero
+    #     )
+    #     current_state = extract_direct_on(
+    #         solver.model(), blocks, names, active_context.ON_star
+    #     )
 
-        start_stacks = build_stacks(start_state)
-        current_stacks = build_stacks(current_state)
+    #     start_stacks = build_stacks(start_state)
+    #     current_stacks = build_stacks(current_state)
 
-        print_stacks(start_stacks, "START STATE")
-        print_stacks(current_stacks, "CURRENT STATE")
+    #     print_stacks(start_stacks, "START STATE")
+    #     print_stacks(current_stacks, "CURRENT STATE")
 
-        draw_stacks(start_stacks, "start_state.png", "Start State")
-        draw_stacks(current_stacks, "current_state.png", "Current State")
+    #     draw_stacks(start_stacks, "start_state.png", "Start State")
+    #     draw_stacks(current_stacks, "current_state.png", "Current State")
 
     return final_result, filtered_invariants
 
@@ -2157,20 +2170,140 @@ def run_2d_inner_loop_example(
     functions_evaluation_cache = []
     mark_lookup_by_state = [
         # row 1
-        {"x1": False, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": False, "x3": False, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": False, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
+        {
+            "x1": False,
+            "x2": False,
+            "x3": False,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": False,
+            "x3": False,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": False,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
         # row 2
-        {"x1": True, "x2": True, "x3": True, "x4": False, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": False, "x6": False, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": False, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": False, "x8": False, "x9": False},
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": False,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": False,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": False,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
         # row 3
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": False, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": True, "x8": False, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": True, "x8": True, "x9": False},
-        {"x1": True, "x2": True, "x3": True, "x4": True, "x5": True, "x6": True, "x7": True, "x8": True, "x9": True},
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": False,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": True,
+            "x8": False,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": True,
+            "x8": True,
+            "x9": False,
+        },
+        {
+            "x1": True,
+            "x2": True,
+            "x3": True,
+            "x4": True,
+            "x5": True,
+            "x6": True,
+            "x7": True,
+            "x8": True,
+            "x9": True,
+        },
     ]
     return loop_inference_2d(
         states_zero,
@@ -2232,35 +2365,40 @@ def run_unstack_example(
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
             "x4": [0.0, 0.0, 0.15],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [0.0, 0.0, 0.05],
             "x3": [0.0, 0.0, 0.1],
             "x4": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [0.0, 0.0, 0.05],
             "x3": [10.0, 0.0, 0.0],
             "x4": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
         {
             "x1": [0.0, 0.0, 0.0],
             "x2": [15.0, 0.0, 0.0],
             "x3": [10.0, 0.0, 0.0],
             "x4": [5.0, 0.0, 0.0],
+            "tbl": [-100.0, -100.0, -100.0],
         },
     ]
     n_forall = 2
-    relations = [context.ON_star, "equality"]
+    relations = [context.ON_star, context.Higher, "equality"]
     b0 = context.get_consts("b0")
-    constants = [b0]
+    tbl = context.get_consts("tbl")
+    constants = [b0, tbl]
     constants_mappings = [
-        {b0: "x1"},
-        {b0: "x1"},
-        {b0: "x1"},
-        {b0: "x1"},
+        {b0: "x1", tbl: "tbl"},
+        {b0: "x1", tbl: "tbl"},
+        {b0: "x1", tbl: "tbl"},
+        {b0: "x1", tbl: "tbl"},
     ]
 
     return loop_inference(

@@ -79,7 +79,9 @@ def higher_implementation(block1, block2) -> bool:
     """define the numerical interpretation of the on(block1, block2) between two blocks"""
     x1, y1, z1 = block1
     x2, y2, z2 = block2
-    return 0 <= z1 - z2
+    return (0 <= z1 - z2 and z1 >= 0.0 and z2 >= 0.0) or (
+        x1 == x2 and y1 == y2 and z1 == z2
+    )
 
 
 def scattered_implementation(block1, block2) -> bool:

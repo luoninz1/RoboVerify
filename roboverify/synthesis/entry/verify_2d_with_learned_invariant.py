@@ -146,20 +146,21 @@ def verify_2d_program_with_learned_invariant(
         outer_inv = _outer_template(context, h, i)
         inner_inv = _inner_template(context, h, i, j)
     else:
-        # outer_inv = infer_outer_loop_invariant(context)
+        outer_inv = infer_outer_loop_invariant(context)
         inner_inv = infer_inner_loop_invariant(context)
         # inner_inv = _inner_template(context, h, i, j)
         # Debug check: compare learned outer vs handwritten outer as plain Z3 formulas.
         # print("checking learned outer vs handwritten outer")
-        # outer_inv_z3 = And(*[c.expr for c in outer_inv])
-        # context.check_satisfiable_with_pq(
-        #     p=outer_inv_z3, q=_outer_template(context, h, i)
-        # )
+        outer_inv_z3 = And(*[c.expr for c in outer_inv])
+        context.check_satisfiable_with_pq(
+            p=outer_inv_z3, q=_outer_template(context, h, i)
+        )
 
         print("checking learned inner vs handwritten inner")
         inner_inv_z3 = And(*[c.expr for c in inner_inv])
-        context.check_satisfiable_with_pq(p=inner_inv_z3, q=_inner_template(context, h, i, j))
-
+        context.check_satisfiable_with_pq(
+            p=inner_inv_z3, q=_inner_template(context, h, i, j)
+        )
 
     program = _build_program(context, h, i, j, outer_inv, inner_inv)
     pre = precondition(context, h)

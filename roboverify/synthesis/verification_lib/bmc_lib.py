@@ -77,6 +77,7 @@ from synthesis.api.instructions import (
     Seq,
 )
 from synthesis.util.on import z3_on
+
 ProgramPart = Union[Instruction, Seq]
 ProgramInput = Union[Sequence[ProgramPart], ProgramPart]
 
@@ -87,8 +88,10 @@ def flatten_program(program: ProgramInput) -> List[Instruction]:
     def walk(p: ProgramInput) -> List[Instruction]:
         if isinstance(p, Seq):
             return walk(p.s1) + walk(p.s2)
-        if isinstance(p, Sequence) and not isinstance(p, (str, bytes)) and not isinstance(
-            p, Instruction
+        if (
+            isinstance(p, Sequence)
+            and not isinstance(p, (str, bytes))
+            and not isinstance(p, Instruction)
         ):
             out: List[Instruction] = []
             for x in p:
@@ -132,7 +135,9 @@ def infer_block_layout(program: ProgramInput) -> Tuple[Tuple[str, ...], Dict[str
     return _infer_block_universe(flat)
 
 
-def _infer_block_universe(flat: Sequence[Instruction]) -> Tuple[Tuple[str, ...], Dict[str, int]]:
+def _infer_block_universe(
+    flat: Sequence[Instruction],
+) -> Tuple[Tuple[str, ...], Dict[str, int]]:
     has_name = any(isinstance(ins, _BY_NAME_TYPES) for ins in flat)
     has_id = any(isinstance(ins, _BY_ID_TYPES) for ins in flat)
     if has_name and has_id:
@@ -202,7 +207,9 @@ class BMCTraceSymbols:
 _bmc_enum_sort_id = itertools.count()
 
 
-def _make_holding_sort(block_names: Sequence[str]) -> Tuple[z3.SortRef, z3.ExprRef, Dict[str, z3.ExprRef]]:
+def _make_holding_sort(
+    block_names: Sequence[str],
+) -> Tuple[z3.SortRef, z3.ExprRef, Dict[str, z3.ExprRef]]:
     names = ["none"] + [str(b) for b in block_names]
     sort_name = f"BMC_Obj_{next(_bmc_enum_sort_id)}"
     Obj, consts = z3.EnumSort(sort_name, names)
@@ -344,7 +351,9 @@ def _frame_all(sym: BMCTraceSymbols, t: int) -> List[z3.BoolRef]:
 
 def _encode_pick(sym: BMCTraceSymbols, t: int, box_id: int) -> z3.BoolRef:
     if not 0 <= box_id < len(sym.block_names):
-        raise IndexError(f"Pick box id {box_id} out of range for {len(sym.block_names)} blocks.")
+        raise IndexError(
+            f"Pick box id {box_id} out of range for {len(sym.block_names)} blocks."
+        )
     name = sym.block_names[box_id]
     cons: List[z3.BoolRef] = [
         sym.holding[t] == sym.NONE,
@@ -442,7 +451,9 @@ def encode_step(
     if isinstance(instr, Pick):
         k = str(int(instr.grab_box_id))
         if k not in name_to_box_id:
-            raise KeyError(f"Pick: box id {instr.grab_box_id!r} not in inferred layout keys.")
+            raise KeyError(
+                f"Pick: box id {instr.grab_box_id!r} not in inferred layout keys."
+            )
         return _encode_pick(sym, t, int(name_to_box_id[k]))
     if isinstance(instr, PickByName):
         if instr.grab_box_name not in name_to_box_id:
@@ -460,7 +471,9 @@ def encode_step(
         mz = str(int(instr.target_box_id_z))
         for key, label in ((mx, "x"), (my, "y"), (mz, "z")):
             if key not in name_to_box_id:
-                raise KeyError(f"Move: target_box_id_{label}={key!r} not in inferred layout keys.")
+                raise KeyError(
+                    f"Move: target_box_id_{label}={key!r} not in inferred layout keys."
+                )
         ix = int(name_to_box_id[mx])
         iy = int(name_to_box_id[my])
         iz = int(name_to_box_id[mz])
@@ -491,9 +504,12 @@ def encode_step(
     raise TypeError(f"encode_step: unsupported instruction {type(instr).__name__}")
 
 
-def _bmc_setup(
-    program: ProgramInput, offset_mode: str
-) -> Tuple[BMCTraceSymbols, List[Instruction], Dict[Tuple[int, str], z3.ArithRef], Mapping[str, int]]:
+def _bmc_setup(program: ProgramInput, offset_mode: str) -> Tuple[
+    BMCTraceSymbols,
+    List[Instruction],
+    Dict[Tuple[int, str], z3.ArithRef],
+    Mapping[str, int],
+]:
     flat = flatten_program(program)
     _check_program_supported(flat)
     block_names, name_to_box_id = _infer_block_universe(flat)
@@ -503,7 +519,9 @@ def _bmc_setup(
     elif offset_mode == "solve":
         off = _collect_offset_variables(flat)
     else:
-        raise ValueError(f"offset_mode must be 'solve' or 'verify', got {offset_mode!r}")
+        raise ValueError(
+            f"offset_mode must be 'solve' or 'verify', got {offset_mode!r}"
+        )
     return sym, flat, off, name_to_box_id
 
 
@@ -520,7 +538,9 @@ def _bmc_add_body(
     s.add(*_expand_constraints(sym, initial_constraints))
     s.add(*_expand_constraints(sym, extra_constraints))
     for t, instr in enumerate(flat):
-        s.add(encode_step(sym, t, instr, name_to_box_id=name_to_box_id, offset_vars=off))
+        s.add(
+            encode_step(sym, t, instr, name_to_box_id=name_to_box_id, offset_vars=off)
+        )
 
 
 def _bmc_build_and_check_solve(
@@ -534,7 +554,15 @@ def _bmc_build_and_check_solve(
 ) -> Tuple[BMCTraceSymbols, z3.Solver, z3.CheckSatResult]:
     sym, flat, off, name_to_box_id = _bmc_setup(program, "solve")
     s = solver if solver is not None else z3.Solver()
-    _bmc_add_body(s, sym, flat, name_to_box_id, off, initial_constraints=initial_constraints, extra_constraints=extra_constraints)
+    _bmc_add_body(
+        s,
+        sym,
+        flat,
+        name_to_box_id,
+        off,
+        initial_constraints=initial_constraints,
+        extra_constraints=extra_constraints,
+    )
     g_final = goal(sym)
     if assume_goal_false_at_start and sym.T > 0:
         g0 = instantiate_goal_at_time(sym, g_final, sym.T, 0)
