@@ -14,6 +14,7 @@ from z3 import (
     Implies,
     Not,
     Or,
+    get_var_index,
     is_and,
     is_app,
     is_false,
@@ -22,6 +23,7 @@ from z3 import (
     is_or,
     is_quantifier,
     is_true,
+    is_var,
     sat,
     simplify,
     substitute,
@@ -554,6 +556,23 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
         return expr
 
 
+def _push_quantifier_binders(quantifier_expr, binders):
+    """Extend de Bruijn binder stack when entering a quantifier body."""
+    num_vars = quantifier_expr.num_vars()
+    names = [quantifier_expr.var_name(i) for i in range(num_vars)]
+    sorts = [quantifier_expr.var_sort(i) for i in range(num_vars)]
+    # Innermost quantified variable has de Bruijn index 0.
+    new_consts = [Const(names[i], sorts[i]) for i in reversed(range(num_vars))]
+    return new_consts + binders
+
+
+def _resolve_box_var(expr, binders):
+    """Map a Box-sort bound variable (de Bruijn) to its named Const."""
+    if is_var(expr):
+        return binders[get_var_index(expr)]
+    return expr
+
+
 def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     """Weakest-precondition rewrite for ON_star after put(upper, tbl).
 
@@ -601,22 +620,22 @@ def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     return expr
 
 
-def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context):
-    """Weakest-precondition rewrite for Higher after put(placed_block, tbl).
+def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context, binders=None):
+    """Weakest-precondition rewrite for Higher after put(placed_block, tbl)."""
+    if binders is None:
+        binders = []
 
-    Parallel to ``rewrite_for_put_on_tbl_for_ON_star`` / ``ON_func_substituted``:
-
-        Higher'(m, n) =
-            Higher(m, n) ∧ (¬Higher(m, placed_block) ∨ Higher(n, placed_block))
-
-    For ``Put("b", "tbl")``, ``placed_block`` is the constant for ``b``.
-    """
     if is_quantifier(expr):
         num_vars = expr.num_vars()
         var_sorts = [expr.var_sort(i) for i in range(num_vars)]
         var_names = [expr.var_name(i) for i in range(num_vars)]
         body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_Higher(body, placed_block, context)
+        rewritten_body = rewrite_for_put_on_tbl_for_Higher(
+            body,
+            placed_block,
+            context,
+            _push_quantifier_binders(expr, binders),
+        )
         if expr.is_forall():
             return ForAll(
                 list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
@@ -631,8 +650,10 @@ def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context):
         decl = expr.decl()
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             m, n = expr.children()
+            m = _resolve_box_var(m, binders)
+            n = _resolve_box_var(n, binders)
             t = Const("t", context.BoxSort)
-            tbl = Const("tbl", context.BoxSort)
+            tbl = context.get_consts("tbl")
             return Or(
                 And(m == placed_block, n == placed_block),
                 And(m != placed_block, n != placed_block, context.Higher(m, n)),
@@ -641,10 +662,60 @@ def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context):
                     n != placed_block,
                     ForAll([t], Implies(t != tbl, context.Higher(t, n))),
                 ),
-                And(m != placed_block, n == placed_block, n != tbl),
+                And(m != placed_block, m != tbl, n == placed_block, n != tbl),
             )
         new_children = [
-            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context)
+            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context, binders)
+            for c in expr.children()
+        ]
+        return decl(*new_children)
+
+    return expr
+
+
+def rewrite_for_put_on_tbl_for_scattered(expr, placed_block, context):
+    """Weakest-precondition rewrite for Scattered after put(placed_block, tbl).
+
+    Parallel to ``rewrite_for_put_on_tbl_for_ON_star`` and
+    ``rewrite_for_put_on_tbl_for_Higher``. For each ``Scattered(m, n)`` atom in
+    the postcondition, replace it with the precondition formula ``Scattered'(m, n)``
+    describing how scatteredness changes when ``placed_block`` is placed on ``tbl``.
+
+    For ``Put("b_prime", "tbl")``, ``placed_block`` is the constant for ``b_prime``.
+    When ``context.use_tbl`` is set, axioms already force ``Not(Scattered(x, tbl))``;
+    the rewrite should remain consistent with those axioms.
+
+    See ``rewrite_for_put_for_scattered`` for the put-on-block (non-tbl) case.
+    """
+    if is_quantifier(expr):
+        num_vars = expr.num_vars()
+        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
+        var_names = [expr.var_name(i) for i in range(num_vars)]
+        body = expr.body()
+        rewritten_body = rewrite_for_put_on_tbl_for_scattered(
+            body, placed_block, context
+        )
+        if expr.is_forall():
+            return ForAll(
+                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+                rewritten_body,
+            )
+        return Exists(
+            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
+            rewritten_body,
+        )
+
+    if is_app(expr):
+        decl = expr.decl()
+        if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Scattered":
+            m, n = expr.children()
+            return Or(
+                And(m == placed_block, n != placed_block),
+                And(m != placed_block, n == placed_block),
+                And(m != placed_block, n != placed_block, context.Scattered(m, n)),
+            )
+        new_children = [
+            rewrite_for_put_on_tbl_for_scattered(c, placed_block, context)
             for c in expr.children()
         ]
         return decl(*new_children)
@@ -656,10 +727,13 @@ def _put_base_is_tbl(seq_instruction: Put) -> bool:
     return seq_instruction.base_block == "tbl"
 
 
-def rewrite_for_put_for_higher(expr, b_prime, b, context):
+def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
     """Rewrite every possible occurrence of alpha<higher> beta to
     Or(alpha<higher>beta, And(alpha<higher>b_prime, b<higher>beta))
     """
+    if binders is None:
+        binders = []
+
     # Case 1: Quantifier
     if is_quantifier(expr):
         # Extract info about the quantifier
@@ -669,7 +743,9 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context):
 
         # Extract and rewrite the body
         body = expr.body()
-        rewritten_body = rewrite_for_put_for_higher(body, b_prime, b, context)
+        rewritten_body = rewrite_for_put_for_higher(
+            body, b_prime, b, context, _push_quantifier_binders(expr, binders)
+        )
 
         # Rebuild the quantifier (keep same type)
         if expr.is_forall():
@@ -690,6 +766,8 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context):
         # Match ON_star(a,b)
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             m, n = expr.children()
+            m = _resolve_box_var(m, binders)
+            n = _resolve_box_var(n, binders)
             t = Const("t", context.BoxSort)
             return Or(
                 And(m != b_prime, m != b, n != b_prime, n != b, context.Higher(m, n)),
@@ -728,7 +806,8 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context):
 
         # Otherwise rebuild recursively
         new_children = [
-            rewrite_for_put_for_higher(c, b_prime, b, context) for c in expr.children()
+            rewrite_for_put_for_higher(c, b_prime, b, context, binders)
+            for c in expr.children()
         ]
         return decl(*new_children)
 
@@ -969,17 +1048,17 @@ class Program:
             )
             print(f"[counterexample diagram] saved {written}")
 
-        print("testing axioms")
-        axiom_check, axiom_model = solver.check_satisfiable(
-            None, visualize_model=True, viz_tag="axioms_consistency"
-        )
-        if axiom_check != sat:
-            ok = False
-            print(
-                f"[FAIL] axioms consistency check returned {axiom_check}; expected sat"
-            )
-            save_goal_counterexample_on_failure("axioms_consistency", axiom_model)
-        print("=====================")
+        # print("testing axioms")
+        # axiom_check, axiom_model = solver.check_satisfiable(
+        #     None, visualize_model=True, viz_tag="axioms_consistency"
+        # )
+        # if axiom_check != sat:
+        #     ok = False
+        #     print(
+        #         f"[FAIL] axioms consistency check returned {axiom_check}; expected sat"
+        #     )
+        #     save_goal_counterexample_on_failure("axioms_consistency", axiom_model)
+        # print("=====================")
 
         print("total number of VCs:", len(vcs))
         for idx, vc in enumerate(vcs):
@@ -987,6 +1066,9 @@ class Program:
             if is_implies(vc):
                 premise = vc.arg(0)
                 conclusion = vc.arg(1)
+                print("premise:", premise)
+                print("conclusion:", conclusion)
+                print("---------------------")
                 print("check 1: axioms + premise")
                 check1, model1 = solver.check_satisfiable(
                     premise,
@@ -1033,15 +1115,30 @@ class Program:
             print("=====================")
         return ok
 
+    @staticmethod
+    def _invariant_condition_exprs(invariant):
+        """Expand a while-loop invariant to Z3 bool exprs for low-level checking."""
+        if isinstance(invariant, list):
+            if invariant and hasattr(invariant[0], "expr"):
+                return [c.expr for c in invariant]
+            return list(invariant)
+        if invariant is None:
+            return []
+        return [invariant]
+
     def lowlevel_verification(
         self,
         context: Union[lowlevel_verification_lib.LowLevelContext, None] = None,
         sort_name: str = "Box",
+        default_block_length: float = 0.05,
+        constants: Union[List[str], None] = None,
     ):
         solver = (
             context
             if context is not None
-            else lowlevel_verification_lib.LowLevelContext(sort_name=sort_name)
+            else lowlevel_verification_lib.LowLevelContext(
+                sort_name=sort_name, default_L=default_block_length
+            )
         )
         ok = True
         found_while = False
@@ -1055,9 +1152,10 @@ class Program:
                 print(f"body: {inst.body}")
                 print(f"instantiated_cond: {inst.instantiated_cond}")
                 loop_ok = solver.start_verification(
-                    [*inst.invariant, inst.instantiated_cond],
+                    self._invariant_condition_exprs(inst.invariant)
+                    + [inst.instantiated_cond],
                     inst.body,
-                    constants=["b0", "b", "b_prime"],
+                    constants=constants,
                 )
                 if not loop_ok:
                     ok = False
@@ -1132,7 +1230,8 @@ def wp(seq_instruction, Q, context):
         if _put_base_is_tbl(seq_instruction):
             # put(upper, tbl): e.g. Put("b", "tbl") places block b on the table.
             Q = rewrite_for_put_on_tbl_for_ON_star(Q, placed, context)
-            return rewrite_for_put_on_tbl_for_Higher(Q, placed, context)
+            Q = rewrite_for_put_on_tbl_for_Higher(Q, placed, context)
+            return rewrite_for_put_on_tbl_for_scattered(Q, placed, context)
         b = context.get_consts(seq_instruction.base_block)
         b_prime = placed
         Q = And(

@@ -2390,15 +2390,16 @@ def run_unstack_example(
         },
     ]
     n_forall = 2
-    relations = [context.ON_star, context.Higher, "equality"]
+    relations = [context.ON_star, context.Higher, context.Scattered, "equality"]
     b0 = context.get_consts("b0")
+    b = context.get_consts("b")
     tbl = context.get_consts("tbl")
-    constants = [b0, tbl]
+    constants = [b0, b, tbl]
     constants_mappings = [
-        {b0: "x1", tbl: "tbl"},
-        {b0: "x1", tbl: "tbl"},
-        {b0: "x1", tbl: "tbl"},
-        {b0: "x1", tbl: "tbl"},
+        {b0: "x1", b: "x1", tbl: "tbl"},
+        {b0: "x1", b: "x4", tbl: "tbl"},
+        {b0: "x1", b: "x3", tbl: "tbl"},
+        {b0: "x1", b: "x2", tbl: "tbl"},
     ]
 
     return loop_inference(

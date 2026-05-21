@@ -169,6 +169,16 @@ class HighLevelContext:
             ),
             "higher3",
         )
+        s.assert_and_track(
+            ForAll([x, y], Implies(self.ON_star(x, y), self.Higher(x, y))),
+            "higher_on_star",
+        )
+        s.assert_and_track(
+            ForAll(
+                [x, y], Implies(And(self.ON_star(x, y), x != y), Not(self.Higher(y, x)))
+            ),
+            "higher_false_on_star_reverse",
+        )
         if self.use_tbl:
             tbl = self.get_consts("tbl")
             s.assert_and_track(
@@ -195,6 +205,12 @@ class HighLevelContext:
             ),
             "scattered3",
         )
+        if self.use_tbl:
+            tbl = self.get_consts("tbl")
+            s.assert_and_track(
+                ForAll([x], Not(self.Scattered(x, tbl))),
+                "scattered_not_tbl",
+            )
 
     def add_axiom_goal_nested(self, s: Solver):
         if self.GoalSort is None:

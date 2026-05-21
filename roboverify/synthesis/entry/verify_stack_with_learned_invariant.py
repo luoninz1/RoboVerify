@@ -10,18 +10,11 @@ import synthesis.verification_lib.highlevel_verification_lib as highlevel_verifi
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
 from synthesis.entry.run_rollouts import run_program_rollouts
-
-# )
-# from synthesis.environment.general_env import GymToGymnasium
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
-    run_partial_stack_example,
     run_proposal_example,
     serialize_invariant,
 )
-
-# from synthesis.environment.cee_us_env.fpp_construction_env import (
-# FetchPickAndPlaceConstruction,
 
 
 def verify_stack_program_with_learned_invariant(
@@ -36,9 +29,6 @@ def verify_stack_program_with_learned_invariant(
     learned_invariant, learned_invariant_lists = run_proposal_example(
         context=inference_context
     )
-    # learned_invariant, learned_invariant_lists = run_proposal_example(
-    # context=inference_context
-    # )
 
     if verification_mode == "finite":
         context = highlevel_verification_lib.HighLevelContext(
@@ -75,37 +65,37 @@ def verify_stack_program_with_learned_invariant(
     ]
     program = Program(2, instructions=instructions)
 
-    # BOX_LENGTH = 0.05
-    # ll_instruction = deepcopy(instructions)
-    # ll_instruction[1].body = [
-    #     PickPlaceByName(
-    #         grab_box_name="b_prime",
-    #         target_box_name_x="b_prime",
-    #         target_box_name_y="b_prime",
-    #         target_box_name_z="b",
-    #         target_offset=[0.0, 0.0, 2 * BOX_LENGTH],
-    #         release=False,
-    #     ),
-    #     PickPlaceByName(
-    #         grab_box_name="b_prime",
-    #         target_box_name_x="b",
-    #         target_box_name_y="b",
-    #         target_box_name_z="b",
-    #         target_offset=[0.0, 0.0, 2 * BOX_LENGTH],
-    #         release=False,
-    #     ),
-    #     PickPlaceByName(
-    #         grab_box_name="b_prime",
-    #         target_box_name_x="b",
-    #         target_box_name_y="b",
-    #         target_box_name_z="b",
-    #         target_offset=[0.0, 0.0, 1.5 * BOX_LENGTH],
-    #         release=True,
-    #     ),
-    # ]
-    # ll_instruction[1].invariant = learned_invariant_lists
-    # ll_instruction[1].body.append(Assign("b", "b_prime"))
-    # ll_program = Program(2, instructions=ll_instruction)
+    BOX_LENGTH = 0.05
+    ll_instruction = deepcopy(instructions)
+    ll_instruction[1].body = [
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name_x="b_prime",
+            target_box_name_y="b_prime",
+            target_box_name_z="b",
+            target_offset=[0.0, 0.0, 4 * BOX_LENGTH],
+            release=False,
+        ),
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name_x="b",
+            target_box_name_y="b",
+            target_box_name_z="b",
+            target_offset=[0.0, 0.0, 4 * BOX_LENGTH],
+            release=False,
+        ),
+        PickPlaceByName(
+            grab_box_name="b_prime",
+            target_box_name_x="b",
+            target_box_name_y="b",
+            target_box_name_z="b",
+            target_offset=[0.0, 0.0, 1.5 * BOX_LENGTH],
+            release=True,
+        ),
+    ]
+    ll_instruction[1].invariant = learned_invariant_lists
+    ll_instruction[1].body.append(Assign("b", "b_prime"))
+    ll_program = Program(2, instructions=ll_instruction)
 
     # def _env_factory(seed: int):
     #     # Keep construction local so the rollout utility can be reused elsewhere.
@@ -154,9 +144,9 @@ def verify_stack_program_with_learned_invariant(
     postcondition = ForAll([m], context.ON_star(m, b0))
 
     hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
-    # ll_ok = ll_program.lowlevel_verification()
-    print(f"hl_ok: {hl_ok}")
-    return bool(hl_ok)
+    ll_ok = ll_program.lowlevel_verification(constants=["b0", "b", "b_prime"])
+    print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
+    return bool(hl_ok and ll_ok)
 
 
 if __name__ == "__main__":

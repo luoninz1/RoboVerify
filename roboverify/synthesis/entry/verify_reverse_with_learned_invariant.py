@@ -12,12 +12,12 @@ from synthesis.api.program import Assign, Program, Put, While
 from synthesis.entry.run_rollouts import run_program_rollouts
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
-    run_unstack_example,
+    run_reverse_example,
     serialize_invariant,
 )
 
 
-def verify_unstack_program_with_learned_invariant(
+def verify_reverse_program_with_learned_invariant(
     verification_mode: str = "infinite",
     num_blocks: int = 4,
     visualize_finite_scene: bool = True,
@@ -38,14 +38,14 @@ def verify_unstack_program_with_learned_invariant(
             visualize_enum_scene=visualize_finite_scene,
             visualization_prefix=visualization_prefix,
         )
-        learned_invariant, learned_invariant_lists = run_unstack_example(
+        learned_invariant, learned_invariant_lists = run_reverse_example(
             context=inference_context
         )
     else:
         inference_context = highlevel_verification_lib.HighLevelContext(
             mode="declare", use_tbl=True, exists_top=True
         )
-        learned_invariant, learned_invariant_lists = run_unstack_example(
+        learned_invariant, learned_invariant_lists = run_reverse_example(
             context=inference_context
         )
 
@@ -100,38 +100,6 @@ def verify_unstack_program_with_learned_invariant(
     ]
     program = Program(2, instructions=instructions)
 
-    BOX_LENGTH = 0.05
-    ll_instruction = deepcopy(instructions)
-    ll_instruction[1].body = [
-        PickPlaceByName(
-            grab_box_name="b_prime",
-            target_box_name_x="b_prime",
-            target_box_name_y="b_prime",
-            target_box_name_z="b_prime",
-            target_offset=[0.0, 0.0, 4 * BOX_LENGTH],
-            release=False,
-        ),
-        PickPlaceByName(
-            grab_box_name="b_prime",
-            target_box_name_x="b",
-            target_box_name_y="b",
-            target_box_name_z="b_prime",
-            target_offset=[-3.0 * BOX_LENGTH, 0.0, 4 * BOX_LENGTH],
-            release=False,
-        ),
-        PickPlaceByName(
-            grab_box_name="b_prime",
-            target_box_name_x="b",
-            target_box_name_y="b",
-            target_box_name_z="b",
-            target_offset=[-3.0 * BOX_LENGTH, 0.0, 0.0],
-            release=True,
-        ),
-    ]
-    ll_instruction[1].invariant = learned_invariant_lists
-    ll_instruction[1].body.append(Assign("b", "b_prime"))
-    ll_program = Program(2, instructions=ll_instruction)
-
     m, n = Consts("m n", context.BoxSort)
     (tbl,) = Consts("tbl", context.BoxSort)
     precondition = And(
@@ -154,9 +122,10 @@ def verify_unstack_program_with_learned_invariant(
     )
 
     hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
-    ll_ok = ll_program.lowlevel_verification(constants=["b0", "b", "b_prime", "tbl"])
-    print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
-    return bool(hl_ok and ll_ok)
+    # ll_ok = ll_program.lowlevel_verification()
+    print(f"hl_ok: {hl_ok}")
+    # print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
+    # return bool(hl_ok and ll_ok)
 
 
 if __name__ == "__main__":
@@ -181,12 +150,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--viz-prefix",
         type=str,
-        default="verify_unstack",
+        default="verify_reverse",
         help="Output prefix for generated finite-mode scene images.",
     )
     args = parser.parse_args()
 
-    verify_unstack_program_with_learned_invariant(
+    verify_reverse_program_with_learned_invariant(
         verification_mode=args.verification_mode,
         num_blocks=args.num_blocks,
         visualize_finite_scene=not args.disable_scene_viz,

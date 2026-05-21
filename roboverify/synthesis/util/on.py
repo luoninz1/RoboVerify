@@ -88,7 +88,11 @@ def scattered_implementation(block1, block2) -> bool:
     """define the numerical interpretation of the scattered(block1, block2) between two blocks"""
     x1, y1, z1 = block1
     x2, y2, z2 = block2
-    return abs(x1 - x2) >= 2 * BLOCK_LENGTH or abs(y1 - y2) >= 2 * BLOCK_LENGTH
+    return (
+        (abs(x1 - x2) >= 2 * BLOCK_LENGTH or abs(y1 - y2) >= 2 * BLOCK_LENGTH)
+        and z1 >= 0.0
+        and z2 >= 0.0
+    )
 
 
 def top_implementation(block, all_blocks) -> bool:
