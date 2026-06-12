@@ -2,6 +2,7 @@ import math
 import os
 import pickle
 import random
+import tempfile
 from copy import deepcopy
 from typing import Any, Optional, Tuple
 
@@ -293,6 +294,29 @@ def make_roboverify_stack_env(
     )
 
 
+def save_frames_as_video(
+    frames: list, output_path: str, *, fps: int = 30
+) -> None:
+    """Write a list of RGB frames to an mp4 file."""
+    if not frames:
+        return
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        for idx, frame in enumerate(frames):
+            imageio.imwrite(
+                os.path.join(tmp_dir, f"img{idx:04d}.png"),
+                np.asarray(frame, dtype=np.uint8),
+            )
+        input_pattern = os.path.join(tmp_dir, "img%04d.png")
+        (
+            ffmpeg.input(input_pattern, framerate=fps)
+            .output(output_path, vcodec="libx264", pix_fmt="yuv420p")
+            .overwrite_output()
+            .run(quiet=True)
+        )
+    print(f"Video saved to {output_path}")
+
+
 def images_to_video(input_dir, output_video_path="output.mp4", framerate=30):
     """
     Convert PNG images in a directory to a video using ffmpeg.
@@ -355,6 +379,54 @@ def save_demo_trajectories(
         np.save(os.path.join(demo_dir, "expert_states.npy"), np.array(expert_states))
 
     print(f"Saved {len(trajectories)} demo trajectories to {demo_dir}/")
+
+
+def load_demo_trajectories(
+    demo_dir: str = "demos",
+) -> Tuple[list, list, Optional[int]]:
+    """Load trajectories saved by :func:`save_demo_trajectories`.
+
+    Returns ``(trajectories, seeds, num_blocks)`` where each trajectory is a
+    list of observation vectors.
+    """
+    pkl_path = os.path.join(demo_dir, "all_trajectories.pkl")
+    with open(pkl_path, "rb") as f:
+        data = pickle.load(f)
+    trajectories = [list(traj) for traj in data["trajectories"]]
+    seeds = list(data.get("seeds", range(len(trajectories))))
+    return trajectories, seeds, data.get("num_blocks")
+
+
+def group_trajectory_images(flat_imgs: list, trajectories: list) -> list[list]:
+    """Group a flat frame list into one sequence per trajectory."""
+    expected = sum(len(traj) for traj in trajectories)
+    if len(flat_imgs) != expected:
+        raise ValueError(
+            f"expected {expected} frames for {len(trajectories)} trajectories, "
+            f"got {len(flat_imgs)}"
+        )
+    grouped: list[list] = []
+    offset = 0
+    for traj in trajectories:
+        length = len(traj)
+        grouped.append(flat_imgs[offset : offset + length])
+        offset += length
+    return grouped
+
+
+def load_demo_images_grouped(img_dir: str, trajectories: list) -> list[list]:
+    """Load ``imgXXXX.png`` frames from ``img_dir`` and group them per demo."""
+    expected = sum(len(traj) for traj in trajectories)
+    flat_imgs: list = []
+    for idx in range(expected):
+        img_path = os.path.join(img_dir, f"img{idx:04d}.png")
+        if not os.path.exists(img_path):
+            raise FileNotFoundError(
+                f"missing {img_path} (expected {expected} frames for "
+                f"{len(trajectories)} demos)"
+            )
+        flat_imgs.append(imageio.imread(img_path))
+    return group_trajectory_images(flat_imgs, trajectories)
 
 
 def save_numpy_arrays_as_images(arrays, output_dir="images"):
@@ -431,6 +503,98 @@ def rollout_demos(
             f"({100.0 * n_success / num_demo:.1f}%)"
         )
         print("number of expert states", len(states))
+    return individual_traj, states, successes, imgs
+
+
+def rollout_demos_from_initial_states(
+    p: program.Program,
+    initial_states: list,
+    *,
+    num_blocks: int = 4,
+    save_imgs: bool = False,
+    video_dir: Optional[str] = None,
+    demo_indices: Optional[list] = None,
+    video_fps: int = 30,
+    verbose: bool = True,
+) -> Tuple[list, list, list, list]:
+    """Roll out ``p`` from fixed initial observations (one per demo).
+
+    Unlike :func:`rollout_demos`, the environment is not reset; each rollout
+    starts from the corresponding entry in ``initial_states``. When ``video_dir``
+    is set, saves ``random_program.mp4`` for each rollout under
+    ``video_dir/demo_XXXX/``.
+    """
+    if not initial_states:
+        return [], [], [], []
+
+    states: list = []
+    imgs: list = []
+    individual_traj: list = []
+    successes: list = []
+    imgs_per_demo: list = []
+
+    if demo_indices is not None and len(demo_indices) != len(initial_states):
+        raise ValueError("demo_indices must have the same length as initial_states")
+
+    for rollout_idx, initial_state in enumerate(initial_states):
+        demo_idx = (
+            demo_indices[rollout_idx]
+            if demo_indices is not None
+            else rollout_idx
+        )
+        set_np_seed(demo_idx)
+        env = make_roboverify_stack_env(num_blocks=num_blocks)
+        try:
+            result = p.eval_from_observation(
+                env, initial_state, return_img=save_imgs or video_dir is not None
+            )
+            capture_imgs = save_imgs or video_dir is not None
+            if capture_imgs:
+                traj, traj_imgs = result
+                if save_imgs:
+                    imgs.extend(traj_imgs)
+                imgs_per_demo.append(traj_imgs)
+            else:
+                traj = result
+                imgs_per_demo.append([])
+
+            success = roboverify_env_success(env, traj[-1] if traj else None)
+            successes.append(success)
+            if verbose:
+                print(
+                    f"demo {demo_idx} (from checkpoint): success={success}, "
+                    f"{len(traj)} states"
+                )
+
+            copy_traj = [deepcopy(state) for state in traj]
+            individual_traj.append(copy_traj)
+            states.extend(copy_traj)
+        finally:
+            env.close()
+
+    if video_dir is not None:
+        os.makedirs(video_dir, exist_ok=True)
+        for rollout_idx, traj_imgs in enumerate(imgs_per_demo):
+            if not traj_imgs:
+                continue
+            demo_idx = (
+                demo_indices[rollout_idx]
+                if demo_indices is not None
+                else rollout_idx
+            )
+            demo_video_dir = os.path.join(video_dir, f"demo_{demo_idx:04d}")
+            save_frames_as_video(
+                traj_imgs,
+                os.path.join(demo_video_dir, "random_program.mp4"),
+                fps=video_fps,
+            )
+
+    if verbose:
+        n_success = sum(successes)
+        print(
+            f"checkpoint rollout success rate: {n_success}/{len(initial_states)} "
+            f"({100.0 * n_success / len(initial_states):.1f}%)"
+        )
     return individual_traj, states, successes, imgs
 
 

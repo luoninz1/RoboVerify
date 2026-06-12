@@ -9,7 +9,7 @@ from synthesis.environment.cee_us_env.fpp_construction_env import (
     FetchPickAndPlaceConstruction,
 )
 from synthesis.environment.general_env import GymToGymnasium
-from synthesis.mcmc import cem, synthesis
+from synthesis.mcmc import cem, decision_tree, synthesis
 
 if __name__ == "__main__":
 
@@ -66,7 +66,109 @@ if __name__ == "__main__":
         verify_reproducible=True,
     )
     synthesis.images_to_video("demo_images", "demo_video.mp4")
-    exit()
+
+    # Learn a discriminating ON(...) feature from demos vs a random program.
+    num_blocks = 4
+    demo_dir = "demos"
+    positive_trajs, _, saved_num_blocks = synthesis.load_demo_trajectories(demo_dir)
+    if saved_num_blocks is not None:
+        num_blocks = saved_num_blocks
+    num_demo = len(positive_trajs)
+    demo_goal_idxs = [len(traj) for traj in positive_trajs]
+
+    random_program = program.generate_random_program(
+        length=8,
+        block_ids=list(range(num_blocks)),
+    )
+    print("=== random program for negative samples ===\n", random_program)
+    negative_trajs, _, _, _ = synthesis.rollout_demos(
+        random_program,
+        num_demo,
+        num_blocks=num_blocks,
+        save_imgs=False,
+        verbose=True,
+    )
+
+    on_features = decision_tree.compute_ON_features(num_blocks)
+    best_tree, best_feature = decision_tree.learn_features(
+        num_blocks,
+        negative_trajs,
+        positive_trajs,
+        demo_goal_idxs,
+        on_features,
+        num_trees=10,
+    )
+    if best_feature is not None:
+        print(f"Learned discriminating feature: {best_feature}")
+        demo_imgs = synthesis.load_demo_images_grouped("demo_images", positive_trajs)
+        feature_video_dir = f"demo_splits_with_{best_feature}".replace(" ", "")
+        demo_splits = decision_tree.split_demos_by_feature(
+            best_feature,
+            positive_trajs,
+            demo_imgs=demo_imgs,
+            save_videos=True,
+            video_dir=feature_video_dir,
+        )
+        print(
+            f"Split {len(demo_splits)} demos using {best_feature}; "
+            f"videos saved under {feature_video_dir}/"
+        )
+
+        valid_splits = [split for split in demo_splits if split["part2"]]
+        part2_trajs = [split["part2"] for split in valid_splits]
+        checkpoint_states = [split["part1"][-1] for split in valid_splits]
+        part2_goal_idxs = [len(traj) for traj in part2_trajs]
+        part2_imgs = [
+            decision_tree._split_frames(
+                demo_imgs[split["demo_idx"]], split["split_idx"]
+            )[1]
+            for split in valid_splits
+        ]
+
+        stage2_random_program = program.generate_random_program(
+            length=8,
+            block_ids=list(range(num_blocks)),
+        )
+        stage1_tag = str(best_feature).replace(" ", "")
+        random_video_dir = f"random_rollouts_after_{stage1_tag}"
+        print(
+            "=== stage-2 random program from part-1 checkpoints ===\n",
+            stage2_random_program,
+        )
+        negative_trajs_stage2, _, _, _ = synthesis.rollout_demos_from_initial_states(
+            stage2_random_program,
+            checkpoint_states,
+            num_blocks=num_blocks,
+            video_dir=random_video_dir,
+            demo_indices=[split["demo_idx"] for split in valid_splits],
+        )
+        print(f"Random program videos saved under {random_video_dir}/")
+
+        best_tree_stage2, best_feature_stage2 = decision_tree.learn_features(
+            num_blocks,
+            negative_trajs_stage2,
+            part2_trajs,
+            part2_goal_idxs,
+            on_features,
+            num_trees=10,
+        )
+        if best_feature_stage2 is not None:
+            print(f"Stage-2 learned feature: {best_feature_stage2}")
+            stage2_video_dir = f"demo_splits_with_{best_feature_stage2}".replace(
+                " ", ""
+            )
+            decision_tree.split_demos_by_feature(
+                best_feature_stage2,
+                part2_trajs,
+                demo_imgs=part2_imgs,
+                save_videos=True,
+                video_dir=stage2_video_dir,
+            )
+            print(
+                f"Split {len(part2_trajs)} stage-2 demos using "
+                f"{best_feature_stage2}; videos saved under {stage2_video_dir}/"
+            )
+
     # p = program.Program(5)
     # p.instructions = [
     #     program.Pick(

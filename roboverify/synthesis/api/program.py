@@ -2,6 +2,8 @@ import itertools
 import os
 import random
 from copy import deepcopy
+
+import numpy as np
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
@@ -938,6 +940,26 @@ class Program:
     def eval(self, env, return_img: bool = False):
         """evaluate the program in the environment and return the trajectories"""
         traj = [env.reset()[0]]
+        if return_img:
+            imgs = [env.render()]
+        for line in self.instructions:
+            line_imgs = line.eval(env, traj, return_img)
+            if return_img:
+                imgs.extend(line_imgs)
+        if return_img:
+            return traj, imgs
+        return traj
+
+    def eval_from_observation(self, env, initial_obs, return_img: bool = False):
+        """Evaluate the program starting from ``initial_obs`` instead of reset."""
+        inner = getattr(env, "env", env)
+        if not hasattr(inner, "set_state_from_observation"):
+            raise TypeError(
+                f"{type(inner).__name__} does not support set_state_from_observation"
+            )
+        initial_obs = np.asarray(initial_obs, dtype=np.float64)
+        inner.set_state_from_observation(initial_obs)
+        traj = [initial_obs.copy()]
         if return_img:
             imgs = [env.render()]
         for line in self.instructions:
