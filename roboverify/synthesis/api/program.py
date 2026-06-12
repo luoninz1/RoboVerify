@@ -1,8 +1,9 @@
 import itertools
 import os
+import random
 from copy import deepcopy
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Sequence, Union
 
 from z3 import (
     Z3_OP_UNINTERPRETED,
@@ -39,11 +40,15 @@ from synthesis.api.instructions import (
     GoalAssign,
     Instruction,
     MarkGoal,
+    Move,
+    MoveByName,
     MoveDown,
     MoveRight,
-    PickPlace,
-    PickPlaceByName,
+    Pick,
+    PickByName,
     Put,
+    Release,
+    ReleaseByName,
     Seq,
     Skip,
     While,
@@ -1163,6 +1168,54 @@ class Program:
         if not found_while:
             print("[WARN] low-level verification found no while loops to check")
         return ok
+
+
+_PICK_MOVE_RELEASE = (Pick, Move, Release)
+
+
+def generate_random_program(
+    length: int,
+    block_ids: Sequence[int] = (0, 1, 2, 3),
+    rng: Optional[random.Random] = None,
+) -> Program:
+    """Build a random straight-line program with ``length`` instructions.
+
+    Each instruction is uniformly sampled from :class:`Pick`, :class:`Move`, and
+    :class:`Release`. Box operands are drawn from ``block_ids``; :class:`Move`
+    ``target_offset`` and :class:`Release` ``target_z`` are randomized floats.
+    """
+    if length < 0:
+        raise ValueError("length must be non-negative")
+    if not block_ids:
+        raise ValueError("block_ids must be non-empty")
+
+    rng = rng or random.Random()
+    instructions: List[Instruction] = []
+    for _ in range(length):
+        kind = rng.choice(_PICK_MOVE_RELEASE)
+        if kind is Pick:
+            instructions.append(Pick(grab_box_id=rng.choice(block_ids)))
+        elif kind is Move:
+            instructions.append(
+                Move(
+                    target_box_id_x=rng.choice(block_ids),
+                    target_box_id_y=rng.choice(block_ids),
+                    target_box_id_z=rng.choice(block_ids),
+                    target_offset=[
+                        rng.uniform(-0.3, 0.3),
+                        rng.uniform(-0.3, 0.3),
+                        rng.uniform(-0.3, 0.3),
+                    ],
+                )
+            )
+        else:
+            instructions.append(
+                Release(
+                    release_box_id=rng.choice(block_ids),
+                    target_z=rng.uniform(-0.3, 0.3),
+                )
+            )
+    return Program(length, instructions=instructions)
 
 
 def to_seq(instructions):

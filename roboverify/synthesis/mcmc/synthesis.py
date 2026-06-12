@@ -3,7 +3,7 @@ import os
 import pickle
 import random
 from copy import deepcopy
-from typing import Any
+from typing import Any, Optional, Tuple
 
 import ffmpeg
 import imageio
@@ -14,7 +14,6 @@ from synthesis.api import program
 from synthesis.environment.cee_us_env.fpp_construction_env import (
     FetchPickAndPlaceConstruction,
 )
-from synthesis.environment.data.collect_demos import CollectDemos
 from synthesis.environment.general_env import GymToGymnasium
 from synthesis.mcmc import cem, cost_func, decision_tree
 from synthesis.util import on
@@ -270,6 +269,28 @@ def optimize_program(
 
 def set_np_seed(seed: int):
     np.random.seed(seed)
+    random.seed(seed)
+
+
+def make_roboverify_stack_env(
+    num_blocks: int = 4,
+    render_mode: str = "rgb_array",
+) -> GymToGymnasium:
+    """RoboVerifyStack environment matching ``synthesis/entry/main.py``."""
+    return GymToGymnasium(
+        FetchPickAndPlaceConstruction(
+            name="roboverify_stack_3",
+            sparse=False,
+            shaped_reward=False,
+            num_blocks=num_blocks,
+            reward_type="sparse",
+            case="RoboVerifyStack",
+            visualize_mocap=False,
+            simple=True,
+            base_block_id=0,
+        ),
+        render_mode=render_mode,
+    )
 
 
 def images_to_video(input_dir, output_video_path="output.mp4", framerate=30):
@@ -296,6 +317,46 @@ def images_to_video(input_dir, output_video_path="output.mp4", framerate=30):
         print("FFmpeg error:", e.stderr.decode())
 
 
+def save_demo_trajectories(
+    trajectories: list,
+    demo_dir: str,
+    *,
+    seeds: Optional[list] = None,
+    num_blocks: Optional[int] = None,
+    expert_states: Optional[list] = None,
+) -> None:
+    """Persist per-demo and combined trajectory files under ``demo_dir``."""
+    os.makedirs(demo_dir, exist_ok=True)
+    if seeds is None:
+        seeds = list(range(len(trajectories)))
+
+    traj_arrays = []
+    for i, traj in enumerate(trajectories):
+        arr = np.array(traj)
+        traj_arrays.append(arr)
+        np.save(os.path.join(demo_dir, f"demo_{i:04d}.npy"), arr)
+        with open(os.path.join(demo_dir, f"demo_{i:04d}.pkl"), "wb") as f:
+            pickle.dump({"seed": seeds[i], "obs": list(traj)}, f)
+
+    with open(os.path.join(demo_dir, "all_trajectories.pkl"), "wb") as f:
+        pickle.dump(
+            {
+                "trajectories": traj_arrays,
+                "seeds": seeds,
+                "num_blocks": num_blocks,
+            },
+            f,
+        )
+    np.save(
+        os.path.join(demo_dir, "all_trajectories.npy"),
+        np.array(traj_arrays, dtype=object),
+    )
+    if expert_states is not None:
+        np.save(os.path.join(demo_dir, "expert_states.npy"), np.array(expert_states))
+
+    print(f"Saved {len(trajectories)} demo trajectories to {demo_dir}/")
+
+
 def save_numpy_arrays_as_images(arrays, output_dir="images"):
     """
     Save a list of numpy arrays as PNG images with filenames like img0000.png, img0001.png, ...
@@ -312,42 +373,180 @@ def save_numpy_arrays_as_images(arrays, output_dir="images"):
         imageio.imwrite(filepath, arr)
 
 
-def collect_trajectories(num_block: int, env_name: str, n: int, save_imgs=False):
+def roboverify_env_success(env, final_obs) -> bool:
+    """Return whether ``final_obs`` satisfies RoboVerifyStack tower success."""
+    if final_obs is None:
+        return False
+    inner = getattr(env, "env", env)
+    if not hasattr(inner, "_is_success"):
+        return False
+    return bool(inner._is_success(final_obs))
+
+
+def rollout_demos(
+    p: program.Program,
+    num_demo: int,
+    *,
+    num_blocks: int = 4,
+    save_imgs: bool = False,
+    verbose: bool = True,
+) -> Tuple[list, list, list, list]:
+    """Roll out ``p`` once per seed without saving to disk.
+
+    Returns ``(individual_traj, flat_states, successes, imgs)``.
+    """
     states = []
     imgs = []
     individual_traj = []
-    for i in range(n):
+    successes = []
+    for i in range(num_demo):
         set_np_seed(i)
-        collector = CollectDemos(
-            "demo",
-            traj_len=150,
-            num_trajectories=1,
-            task="tower",
-            img_path="img",
-            env_name=env_name,
-            block_num=int(num_block),
-            debug=False,
-            render=False,
+        env = make_roboverify_stack_env(num_blocks=num_blocks)
+        try:
+            result = p.eval(env, return_img=save_imgs)
+            if save_imgs:
+                traj, traj_imgs = result
+                imgs.extend(traj_imgs)
+            else:
+                traj = result
+            success = roboverify_env_success(env, traj[-1] if traj else None)
+            successes.append(success)
+            if verbose:
+                print(f"seed {i}: success={success}")
+                print("initial layout")
+                on.print_block_layout(traj[0], num_blocks)
+                print("final layout")
+                on.print_block_layout(traj[-1], num_blocks)
+
+            copy_traj = [deepcopy(state) for state in traj]
+            individual_traj.append(copy_traj)
+            states.extend(copy_traj)
+        finally:
+            env.close()
+
+    if verbose:
+        n_success = sum(successes)
+        print(
+            f"demo success rate: {n_success}/{num_demo} "
+            f"({100.0 * n_success / num_demo:.1f}%)"
         )
-        obs_seq, obs_imgs = collector.collect(store=False)
-        # pdb.set_trace()
-        collector.env.close()
-        print("initial layout")
-        on.print_block_layout(obs_seq[0]["obs"][0], num_block)
-        print("final layout")
-        # pdb.set_trace()
-        on.print_block_layout(obs_seq[0]["obs"][-1], num_block)
-        del collector
-        traj = []
-        for state in obs_seq[0]["obs"]:
-            states.append(state)
-            traj.append(deepcopy(state))
-        individual_traj.append(traj)
-        for image in obs_imgs[0]:
-            imgs.append(image)
+        print("number of expert states", len(states))
+    return individual_traj, states, successes, imgs
+
+
+def trajectories_match(
+    traj_a: list,
+    traj_b: list,
+    *,
+    atol: float = 1e-5,
+) -> Tuple[bool, str]:
+    """Return whether two demo trajectories contain the same states."""
+    a = np.asarray(traj_a, dtype=np.float64)
+    b = np.asarray(traj_b, dtype=np.float64)
+    if a.shape != b.shape:
+        return False, f"shape mismatch {a.shape} vs {b.shape}"
+    if not np.allclose(a, b, atol=atol, rtol=0.0):
+        max_diff = float(np.max(np.abs(a - b)))
+        return False, f"max abs diff {max_diff:.3e}"
+    return True, "states match"
+
+
+def verify_demo_reproducibility(
+    p: program.Program,
+    num_demo: int,
+    reference_trajs: list,
+    *,
+    num_blocks: int = 4,
+    atol: float = 1e-5,
+) -> bool:
+    """Re-collect demos and check each seed reproduces ``reference_trajs``."""
+    if len(reference_trajs) != num_demo:
+        raise ValueError(
+            f"reference_trajs has length {len(reference_trajs)}, expected {num_demo}"
+        )
+
+    print("=== verifying demo reproducibility (second collection) ===")
+    replay_trajs, _, replay_successes, _ = rollout_demos(
+        p,
+        num_demo,
+        num_blocks=num_blocks,
+        save_imgs=False,
+        verbose=False,
+    )
+
+    all_ok = True
+    n_matched = 0
+    for seed in range(num_demo):
+        ok, msg = trajectories_match(
+            reference_trajs[seed], replay_trajs[seed], atol=atol
+        )
+        if ok:
+            n_matched += 1
+        else:
+            all_ok = False
+        print(
+            f"seed {seed}: reproduced={ok}, success={replay_successes[seed]}"
+            + (f" ({msg})" if not ok else "")
+        )
+
+    print(
+        f"reproducibility: {n_matched}/{num_demo} seeds matched "
+        f"({100.0 * n_matched / num_demo:.1f}%)"
+    )
+    return all_ok
+
+
+def collect_trajectories(
+    p: program.Program,
+    num_demo: int,
+    *,
+    num_blocks: int = 4,
+    save_imgs: bool = False,
+    demo_dir: Optional[str] = "demos",
+    img_dir: str = "images",
+    verify_reproducible: bool = False,
+    repro_atol: float = 1e-5,
+):
+    """Roll out ``p`` in RoboVerifyStack ``num_demo`` times with fixed seeds.
+
+    Seed ``i`` is used for demo ``i`` (via :func:`set_np_seed`), so rollouts are
+    reproducible. Trajectories are written under ``demo_dir`` (default
+    ``"demos"``) via :func:`save_demo_trajectories`.
+
+    When ``verify_reproducible`` is True, runs a second collection and checks
+    that every seed yields the same state trajectory.
+
+    Returns flattened states and a list of per-demo trajectories.
+    """
+    individual_traj, states, _successes, imgs = rollout_demos(
+        p,
+        num_demo,
+        num_blocks=num_blocks,
+        save_imgs=save_imgs,
+        verbose=True,
+    )
+
+    if demo_dir is not None:
+        save_demo_trajectories(
+            individual_traj,
+            demo_dir,
+            seeds=list(range(num_demo)),
+            num_blocks=num_blocks,
+            expert_states=states,
+        )
+
     if save_imgs:
-        save_numpy_arrays_as_images(imgs)
-    print("number of expert states", len(states))
+        save_numpy_arrays_as_images(imgs, img_dir)
+
+    if verify_reproducible:
+        verify_demo_reproducibility(
+            p,
+            num_demo,
+            individual_traj,
+            num_blocks=num_blocks,
+            atol=repro_atol,
+        )
+
     return states, individual_traj
 
 

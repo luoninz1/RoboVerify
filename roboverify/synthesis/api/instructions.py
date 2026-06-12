@@ -8,6 +8,52 @@ import z3
 from synthesis.util import on as on_util
 
 
+def grippers_are_closed(obs, atol=1e-3):
+    threshold = 0.026
+    gripper_state = obs[3:5]
+    return (
+        abs(np.sum(gripper_state) - 2 * threshold) < atol
+        or np.sum(gripper_state) - 2 * threshold < 0
+    )
+
+
+def grippers_are_open(obs, atol=1e-3):
+    threshold = 0.026
+    gripper_state = obs[3:5]
+    # return abs(gripper_state[0] - 0.05) < atol
+    # return gripper_state[0] > threshold + atol
+    return np.sum(gripper_state) > 2 * threshold + atol
+
+
+def get_open_gripper_action():
+    return np.array([0.0, 0.0, 0.0, 0.2])
+
+
+def get_close_gripper_action():
+    return np.array([0.0, 0.0, 0.0, -0.2])
+
+
+def get_move_action(
+    observation, target_position, atol=1e-3, gain=10.0, close_gripper=False
+):
+    """
+    Move an end effector to a position and orientation.
+    """
+    # Get the currents
+    # current_position = observation['observation'][:3]
+    current_position = observation[:3]
+
+    action = gain * np.subtract(target_position, current_position)
+    if close_gripper:
+        # gripper_action = -1.
+        gripper_action = -0.2
+    else:
+        gripper_action = 0.0
+    action = np.hstack((action, gripper_action))
+
+    return action
+
+
 class Parameter:
     """Scalar program parameter. ``val is None`` means *unspecified* (trainable /
     BMC-solve unknown), not numeric zero. Use ``numeric_val()`` for a float
@@ -74,6 +120,16 @@ class Instruction(ABC):
     def __str__(self):
         pass
 
+    def _resolve(self, env) -> Dict[str, int]:
+        mapping = getattr(env, "symbolic_name_to_box_id", None)
+        if mapping is None:
+            raise ValueError(
+                "PickPlaceByName requires env.symbolic_name_to_box_id (e.g. {'b0': 1})."
+            )
+        if not isinstance(mapping, dict):
+            raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
+        return mapping
+
 
 class Skip(Instruction):
     def __init__(self, skip_steps: int = 20):
@@ -105,28 +161,52 @@ class Pick(Instruction):
         assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_image=False):
-        # from synthesis.environment.data.pickplace_naive import get_pick_control_naive
+        imgs = []
+        obs = env.flatten_observation(env.env._get_obs())
+        target_box_x = self.get_box_pos(self.grab_box_id, obs)[0]
+        target_box_y = self.get_box_pos(self.grab_box_id, obs)[1]
+        target_z = obs[2]
+        target_position = np.array([target_box_x, target_box_y, target_z])
+        steps = 0
+        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
+            # print(np.linalg.norm(obs[:3] - target_position))
+            action = get_move_action(obs, target_position, close_gripper=False)
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
 
-        # imgs = []
-        # success = False
-        # initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
-        # step = 0
-        # while not success and step < self.limit:
-        #     obs = env.flatten_observation(env.env._get_obs())
-        #     action, success = get_pick_control_naive(
-        #         obs,
-        #         initial_goal_box
-        #         + np.array([offset.val for offset in self.target_offset]),
-        #         block_id=self.grab_box_id,
-        #         last_block=True,
-        #     )
-        #     env.step(action)
-        #     step += 1
-        #     if return_image:
-        #         imgs.append(env.render())
-        #     traj.append(obs)
-        # return imgs
-        pass
+        while steps < self.limit and grippers_are_closed(obs):
+            action = get_open_gripper_action()
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+
+        target_box_z = self.get_box_pos(self.grab_box_id, obs)[2]
+        target_position = np.array([target_box_x, target_box_y, target_box_z])
+        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
+            action = get_move_action(obs, target_position, close_gripper=False)
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+
+        while steps < self.limit and grippers_are_open(obs):
+            action = get_close_gripper_action()
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         return
@@ -157,16 +237,6 @@ class PickByName(Instruction):
         self.grab_box_name = grab_box_name
         self.types = ["BoxName"]
 
-    def _resolve(self, env) -> Dict[str, int]:
-        mapping = getattr(env, "symbolic_name_to_box_id", None)
-        if mapping is None:
-            raise ValueError(
-                "PickPlaceByName requires env.symbolic_name_to_box_id (e.g. {'b0': 1})."
-            )
-        if not isinstance(mapping, dict):
-            raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
-        return mapping
-
     def get_box_pos(self, box_id: int, obs):
         block_num = (obs.shape[0] - 13) // 15
         if 0 <= box_id < block_num:
@@ -174,7 +244,53 @@ class PickByName(Instruction):
         assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_image=False):
-        pass
+        mapping = self._resolve(env)
+        imgs = []
+        obs = env.flatten_observation(env.env._get_obs())
+        target_box_x = self.get_box_pos(mapping[self.grab_box_name], obs)[0]
+        target_box_y = self.get_box_pos(mapping[self.grab_box_name], obs)[1]
+        target_z = obs[2]
+        target_position = np.array([target_box_x, target_box_y, target_z])
+        steps = 0
+        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
+            print(np.linalg.norm(obs[:3] - target_position))
+            action = get_move_action(obs, target_position, close_gripper=False)
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+
+        while steps < self.limit and grippers_are_closed(obs):
+            action = get_open_gripper_action()
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+
+        target_box_z = self.get_box_pos(mapping[self.grab_box_name], obs)[2]
+        target_position = np.array([target_box_x, target_box_y, target_box_z])
+        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
+            action = get_move_action(obs, target_position, close_gripper=False)
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+
+        while steps < self.limit and grippers_are_open(obs):
+            action = get_close_gripper_action()
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         return
@@ -227,28 +343,31 @@ class Move(Instruction):
         assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_image=False):
-        # from synthesis.environment.data.pickplace_naive import get_pick_control_naive
-
-        # imgs = []
-        # success = False
-        # initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
-        # step = 0
-        # while not success and step < self.limit:
-        #     obs = env.flatten_observation(env.env._get_obs())
-        #     action, success = get_pick_control_naive(
-        #         obs,
-        #         initial_goal_box
-        #         + np.array([offset.numeric_val() for offset in self.target_offset]),
-        #         block_id=self.grab_box_id,
-        #         last_block=True,
-        #     )
-        #     env.step(action)
-        #     step += 1
-        #     if return_image:
-        #         imgs.append(env.render())
-        #     traj.append(obs)
-        # return imgs
-        pass
+        imgs = []
+        obs = env.flatten_observation(env.env._get_obs())
+        target_box_x = (
+            self.get_box_pos(self.target_box_id_x, obs)[0]
+            + self.target_offset[0].numeric_val()
+        )
+        target_box_y = (
+            self.get_box_pos(self.target_box_id_y, obs)[1]
+            + self.target_offset[1].numeric_val()
+        )
+        target_box_z = (
+            self.get_box_pos(self.target_box_id_z, obs)[2]
+            + self.target_offset[2].numeric_val()
+        )
+        target_position = np.array([target_box_x, target_box_y, target_box_z])
+        steps = 0
+        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
+            action = get_move_action(obs, target_position, close_gripper=True)
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         for p in self.target_offset:
@@ -311,7 +430,32 @@ class MoveByName(Instruction):
         assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_image=False):
-        pass
+        mapping = self._resolve(env)
+        imgs = []
+        obs = env.flatten_observation(env.env._get_obs())
+        target_box_x = (
+            self.get_box_pos(mapping[self.target_box_name_x], obs)[0]
+            + self.target_offset[0].numeric_val()
+        )
+        target_box_y = (
+            self.get_box_pos(mapping[self.target_box_name_y], obs)[1]
+            + self.target_offset[1].numeric_val()
+        )
+        target_box_z = (
+            self.get_box_pos(mapping[self.target_box_name_z], obs)[2]
+            + self.target_offset[2].numeric_val()
+        )
+        target_position = np.array([target_box_x, target_box_y, target_box_z])
+        steps = 0
+        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
+            action = get_move_action(obs, target_position, close_gripper=True)
+            env.step(action)
+            obs = env.flatten_observation(env.env._get_obs())
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(obs)
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         for p in self.target_offset:
@@ -368,28 +512,37 @@ class Release(Instruction):
         assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_image=False):
-        # from synthesis.environment.data.pickplace_naive import get_pick_control_naive
-
-        # imgs = []
-        # success = False
-        # initial_goal_box = self.get_box_pos(self.target_box_id, traj[-1])
-        # step = 0
-        # while not success and step < self.limit:
-        #     obs = env.flatten_observation(env.env._get_obs())
-        #     action, success = get_pick_control_naive(
-        #         obs,
-        #         initial_goal_box
-        #         + np.array([offset.numeric_val() for offset in self.target_offset]),
-        #         block_id=self.grab_box_id,
-        #         last_block=True,
-        #     )
-        #     env.step(action)
-        #     step += 1
-        #     if return_image:
-        #         imgs.append(env.render())
-        #     traj.append(obs)
-        # return imgs
-        pass
+        imgs = []
+        obs = env.flatten_observation(env.env._get_obs())
+        target_z = (
+            self.get_box_pos(self.release_box_id, obs)[2]
+            + self.target_z_offset.numeric_val()
+        )
+        steps = 0
+        while steps < self.limit and grippers_are_closed(
+            env.flatten_observation(env.env._get_obs())
+        ):
+            action = get_open_gripper_action()
+            env.step(action)
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(env.flatten_observation(env.env._get_obs()))
+        while (
+            steps < self.limit
+            and abs(env.flatten_observation(env.env._get_obs())[2] - target_z) > 2e-2
+        ):
+            action = get_move_action(
+                np.array([0.0, 0.0, env.flatten_observation(env.env._get_obs())[2]]),
+                np.array([0.0, 0.0, target_z]),
+                close_gripper=False,
+            )
+            env.step(action)
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(env.flatten_observation(env.env._get_obs()))
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         self.target_z_offset.register(parameter)
@@ -436,7 +589,38 @@ class ReleaseByName(Instruction):
         assert False, f"unknown box id {box_id}"
 
     def eval(self, env, traj, return_image=False):
-        pass
+        mapping = self._resolve(env)
+        imgs = []
+        obs = env.flatten_observation(env.env._get_obs())
+        target_z = (
+            self.get_box_pos(mapping[self.release_box_name], obs)[2]
+            + self.target_z_offset.numeric_val()
+        )
+        steps = 0
+        while steps < self.limit and grippers_are_closed(
+            env.flatten_observation(env.env._get_obs())
+        ):
+            action = get_open_gripper_action()
+            env.step(action)
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(env.flatten_observation(env.env._get_obs()))
+        while (
+            steps < self.limit
+            and abs(env.flatten_observation(env.env._get_obs())[2] - target_z) > 1e-3
+        ):
+            action = get_move_action(
+                np.array([0.0, 0.0, env.flatten_observation(env.env._get_obs())[2]]),
+                np.array([0.0, 0.0, target_z]),
+                close_gripper=False,
+            )
+            env.step(action)
+            steps += 1
+            if return_image:
+                imgs.append(env.render())
+            traj.append(env.flatten_observation(env.env._get_obs()))
+        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         self.target_z_offset.register(parameter)
