@@ -1,8 +1,10 @@
+import contextlib
+import io
 import itertools
 import pdb
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import sympy
 import z3
@@ -860,15 +862,16 @@ def add_universal_and_existential_quantifiers(
     return result
 
 
-def check_tautology(
-    clause: z3.ExprRef, context: highlevel_verification_lib.HighLevelContext
-) -> bool:
-    """Check whether clause can be directly derived from the axioms we already have
-    Returns True if the caluse is a tautology
-    """
-    solver = z3.Solver()
+def _add_inference_axioms(
+    solver: z3.Solver,
+    context: Optional[highlevel_verification_lib.HighLevelContext] = None,
+    axiom_adder: Optional[Callable[[z3.Solver], None]] = None,
+) -> None:
+    """Add either custom relational axioms or the legacy RoboVerify axioms."""
+    if axiom_adder is not None:
+        axiom_adder(solver)
+        return
 
-    # add all axioms
     active_context = _ensure_context(context)
     if active_context.verification_mode == "goals":
         active_context.add_axiom_goal_nested(solver)
@@ -877,6 +880,19 @@ def check_tautology(
         active_context.add_axiom_on_star_zero(solver)
         active_context.add_axiom_higher(solver)
         active_context.add_axiom_scattered(solver)
+
+
+def check_tautology(
+    clause: z3.ExprRef,
+    context: Optional[highlevel_verification_lib.HighLevelContext] = None,
+    axiom_adder: Optional[Callable[[z3.Solver], None]] = None,
+) -> bool:
+    """Check whether clause can be directly derived from the axioms we already have
+    Returns True if the caluse is a tautology
+    """
+    solver = z3.Solver()
+
+    _add_inference_axioms(solver, context=context, axiom_adder=axiom_adder)
 
     solver.add(z3.Not(clause))
     result = solver.check()
@@ -1239,7 +1255,8 @@ def loop_inference_by_index(
     omega_inv: List,
     universal_quantified_vars: List,
     dataset: Set,
-    context: highlevel_verification_lib.HighLevelContext,
+    context: Optional[highlevel_verification_lib.HighLevelContext] = None,
+    axiom_adder: Optional[Callable[[z3.Solver], None]] = None,
 ):
     print(
         f"=========== learning with index = {index} with target predicate {omega_inv[index]}"
@@ -1296,7 +1313,7 @@ def loop_inference_by_index(
             learned_via="phi",
         )
         for x in universal_quantified_phi_clauses
-        if not check_tautology(x, context)
+        if not check_tautology(x, context=context, axiom_adder=axiom_adder)
     ]
     print("useful invariant using phi", useful_invariant_with_phi)
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -1339,7 +1356,7 @@ def loop_inference_by_index(
             learned_via="phi_prime",
         )
         for x in universal_quantified_phi_prime_clauses
-        if not check_tautology(x, context)
+        if not check_tautology(x, context=context, axiom_adder=axiom_adder)
     ]
     print("useful invariant using phi prime", useful_invariant_with_phi_prime)
     all_invariant = useful_invariant_with_phi + useful_invariant_with_phi_prime
@@ -1442,6 +1459,67 @@ def forall_exists_loop_inference(
     # print(filtered_invariants)
 
 
+def infer_boolean_invariants(
+    dataset: Set[Tuple[bool, ...]],
+    vocabulary: List[z3.ExprRef],
+    universal_quantified_vars: List[z3.ExprRef],
+    *,
+    context: Optional[highlevel_verification_lib.HighLevelContext] = None,
+    axiom_adder: Optional[Callable[[z3.Solver], None]] = None,
+    verbose: bool = True,
+) -> Tuple[z3.ExprRef, List[ProvenancedClause]]:
+    """Learn quantified clauses from an already-grounded Boolean dataset.
+
+    Domain front ends are responsible for constructing ``vocabulary`` and one
+    Boolean row per grounded object assignment. This function contains the
+    reusable, domain-independent learning and redundancy-filtering stages.
+    """
+    if not dataset:
+        raise ValueError("The Boolean inference dataset must not be empty.")
+    if not vocabulary:
+        raise ValueError("The inference vocabulary must not be empty.")
+    if any(len(row) != len(vocabulary) for row in dataset):
+        raise ValueError("Every dataset row must match the vocabulary length.")
+    if context is None and axiom_adder is None:
+        raise ValueError("Provide either a RoboVerify context or an axiom_adder.")
+
+    def _learn() -> Tuple[z3.ExprRef, List[ProvenancedClause]]:
+        inferred_invariants: List[ProvenancedClause] = []
+        for index in range(len(vocabulary)):
+            inferred_invariants.extend(
+                loop_inference_by_index(
+                    [],
+                    [],
+                    [],
+                    [],
+                    index,
+                    vocabulary,
+                    universal_quantified_vars,
+                    dataset,
+                    context=context,
+                    axiom_adder=axiom_adder,
+                )
+            )
+        print("inferred_invariants count", len(inferred_invariants))
+
+        filtered_invariants = check_redundancy(
+            inferred_invariants,
+            context=context,
+            axiom_adder=axiom_adder,
+        )
+        print("filtered candidates", len(filtered_invariants))
+        print(filtered_invariants)
+
+        final_result = z3.And(*[clause.expr for clause in filtered_invariants])
+        print("final result", final_result)
+        return final_result, filtered_invariants
+
+    if verbose:
+        return _learn()
+    with contextlib.redirect_stdout(io.StringIO()):
+        return _learn()
+
+
 # This function is used to learn forall only invariants for 2d programs with function terms
 def loop_inference_2d(
     states_zero: List,
@@ -1480,32 +1558,13 @@ def loop_inference_2d(
         mark_lookup_by_state,
     )
 
-    inferred_invariants = []
-    for i in range(len(omega_inv)):
-        inferred_invariants.extend(
-            loop_inference_by_index(
-                states_zero,
-                states,
-                constants,
-                constants_mappings,
-                i,
-                omega_inv,
-                universal_quantified_vars,
-                dataset,
-                active_context,
-            )
-        )
-    print("inferred_invariants count", len(inferred_invariants))
-
-    filtered_invariants = check_redundancy(inferred_invariants, context=active_context)
-    print("filtered candidates", len(filtered_invariants))
-    print(filtered_invariants)
-
-    final_result = z3.And(
-        *[(c.expr if hasattr(c, "expr") else c) for c in filtered_invariants]
+    return infer_boolean_invariants(
+        dataset,
+        omega_inv,
+        universal_quantified_vars,
+        context=active_context,
+        verbose=True,
     )
-    print("final result", final_result)
-    return final_result, filtered_invariants
 
 
 # This function is used to learn forall only invariants
@@ -1548,31 +1607,13 @@ def loop_inference(
         constants_mappings,
     )
 
-    inferred_invariants = []
-    for i in range(len(omega_inv)):
-        inferred_invariants.extend(
-            loop_inference_by_index(
-                states_zero,
-                states,
-                constants,
-                constants_mappings,
-                i,
-                omega_inv,
-                universal_quantified_vars,
-                dataset,
-                active_context,
-            )
-        )
-    print("inferred_invariants count", len(inferred_invariants))
-
-    filtered_invariants = check_redundancy(inferred_invariants, context=active_context)
-    print("filtered candidates", len(filtered_invariants))
-    print(filtered_invariants)
-
-    final_result = z3.And(
-        *[(c.expr if hasattr(c, "expr") else c) for c in filtered_invariants]
+    final_result, filtered_invariants = infer_boolean_invariants(
+        dataset,
+        omega_inv,
+        universal_quantified_vars,
+        context=active_context,
+        verbose=True,
     )
-    print("final result", final_result)
 
     print("checking equivalent with ground truth")
     solver = z3.Solver()
@@ -1781,21 +1822,16 @@ def loop_inference(
 
 
 def check_redundancy(
-    candidates: List, context: highlevel_verification_lib.HighLevelContext
+    candidates: List,
+    context: Optional[highlevel_verification_lib.HighLevelContext] = None,
+    axiom_adder: Optional[Callable[[z3.Solver], None]] = None,
 ) -> List:
     print("======= starting check redundancy =======")
-    active_context = _ensure_context(context)
     filtered_invariants: List = []
     for candidate in candidates:
         cand_expr = candidate.expr if hasattr(candidate, "expr") else candidate
         solver = z3.Solver()
-        if active_context.verification_mode == "goals":
-            active_context.add_axiom_goal_nested(solver)
-        else:
-            active_context.add_axiom(solver)
-            active_context.add_axiom_on_star_zero(solver)
-            active_context.add_axiom_higher(solver)
-            active_context.add_axiom_scattered(solver)
+        _add_inference_axioms(solver, context=context, axiom_adder=axiom_adder)
 
         for existing in filtered_invariants:
             ex_expr = existing.expr if hasattr(existing, "expr") else existing
