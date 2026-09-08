@@ -1,0 +1,12 @@
+#!/bin/bash
+# mujoco-py requests OpenMP even though its single-simulator path does not use it.
+# Apple clang can compile this path without an extra global GCC/libomp install.
+args=()
+for arg in "$@"; do
+    if [ "$arg" != "-fopenmp" ]; then
+        args+=("$arg")
+    fi
+done
+exec /usr/bin/clang "${args[@]}" \
+    "-Wl,-rpath,${MUJOCO_PY_MUJOCO_PATH}" \
+    "-Wl,-rpath,${MUJOCO_PY_MUJOCO_PATH}/bin"

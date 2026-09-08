@@ -7,7 +7,8 @@ requires-python = ">=3.10"
 dependencies = [
     "cython==0.29.36",
     "ffmpeg-python==0.2.0",
-    "gymnasium==0.29.1",
+    "gym",
+    "gymnasium[box2d]==0.29.1",
     "imageio==2.37.0",
     "matplotlib==3.10.6",
     "mujoco-py==2.1.2.14",
@@ -32,3 +33,6 @@ dev = [
     "jupyter>=1.1.1",
     "nbclient>=0.11.0",
 ]
+
+[tool.uv.sources]
+gym = { path = "third_party/gym-0.21.0.tar.gz" }
