@@ -26,12 +26,23 @@ class BlockTransferRobot(Protocol):
     def check_slots(self, order: Sequence[str | None]) -> None: ...
 
 
+class SortObserver(Protocol):
+    """Read-only callback at completed, physically synchronized loop boundaries."""
+
+    def __call__(
+        self, program_point: str, *, i: int, j: int | None,
+        selected: str | None, order: tuple[str | None, ...],
+    ) -> None: ...
+
+
 def insertion_sort_blocks(
     order: list[str | None],
     keys: Mapping[str, int],
     slots: NDArray[np.float64],
     buffer_position: NDArray[np.float64],
     robot: BlockTransferRobot,
+    *,
+    observer: SortObserver | None = None,
 ) -> list[str]:
     """Stable insertion sort with a physical buffer for the selected block.
 
@@ -42,6 +53,7 @@ def insertion_sort_blocks(
         slots: Float64 array of shape (len(order), 3), containing slot XYZ positions.
         buffer_position: Float64 array of shape (3,), containing the buffer XYZ position.
         robot: Object providing transfer() and check_slots(), such as TableRobot.
+        observer: Optional trace callback; receives loop-head and explicit exit states.
 
     Returns:
         The same list, sorted in place by ascending key. On successful return,
@@ -49,6 +61,9 @@ def insertion_sort_blocks(
     """
     # Insert each block into the sorted prefix order[:i]; a single first block is already sorted.
     for i in range(1, len(order)):
+        # Observe before the guard, including iterations that skip all transfers.
+        if observer is not None:
+            observer("outer_head", i=i, j=None, selected=None, order=tuple(order))
         # Save this block's name; cast tells the type checker it is str without converting or checking it.
         selected = cast(str, order[i])
         # Look up sorting keys by block name: if the largest prefix key is <= this key, it already fits.
@@ -63,6 +78,9 @@ def insertion_sort_blocks(
         robot.check_slots(order)
         # Start comparing with the rightmost block of the sorted prefix.
         j = i - 1
+        # The buffer transfer and its logical bookkeeping are complete at this head.
+        if observer is not None:
+            observer("inner_head", i=i, j=j, selected=selected, order=tuple(order))
         # Scan left while keys are larger; j >= 0 prevents negative indexing, and > preserves equal-key order.
         while j >= 0 and keys[cast(str, order[j])] > keys[selected]:
             # Remember the name of the larger block that must move one slot to the right.
@@ -77,6 +95,9 @@ def insertion_sort_blocks(
             robot.check_slots(order)
             # Move left to compare the next prefix block; -1 means the selected block belongs in slot 0.
             j -= 1
+            # Observe before evaluating the next guard, even when it will be false.
+            if observer is not None:
+                observer("inner_head", i=i, j=j, selected=selected, order=tuple(order))
         # Move the buffered block into the vacancy, after all smaller or equal keys in the prefix.
         robot.transfer(selected, slots[j + 1], f"i={i}: insert key {keys[selected]} into slot {j + 1}")
         # Record the selected block in its insertion slot; the row now has no vacancy.
@@ -85,6 +106,9 @@ def insertion_sort_blocks(
         robot.check_slots(order)
         # Check every adjacent key pair in order[:i + 1]; raise AssertionError if this prefix is unsorted.
         assert all(keys[cast(str, order[k])] <= keys[cast(str, order[k + 1])] for k in range(i))
+    # Python's for-loop index stops at n - 1; the exit prefix length is explicitly n.
+    if observer is not None:
+        observer("outer_exit", i=len(order), j=None, selected=None, order=tuple(order))
     # Return the same, now-sorted list; cast declares that no None entries remain without copying the list.
     return cast(list[str], order)
 

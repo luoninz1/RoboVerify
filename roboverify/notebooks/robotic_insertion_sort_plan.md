@@ -55,3 +55,61 @@ a structural robot protocol and documented NumPy array shapes. The input list ca
 temporarily contain a vacant slot; successful return contains only block names and
 preserves the original list object. Existing four algorithm tests and `git diff
 --check` passed. Runtime behavior is unchanged; the simulation video was not rerun.
+
+## Robotic invariant inference and verification (2026-09-09)
+
+- [x] Instrument the actual sorter with read-only observations at coherent outer/inner loop heads and outer exit.
+- [x] Capture immutable program variables, measured poses, initial identities, and physical occupancy.
+- [x] Define sorting predicates and row-guarded order axioms; reuse the existing RoboVerify learner unchanged.
+- [x] Collect a disjoint physical training/held-out corpus, including all 24 distinct-key permutations and duplicate/negative keys.
+- [x] Infer the actual outer/inner formulas using small vocabulary projections; check concrete axioms and semantic entailment.
+- [x] Check symbolic initiation, buffer entry, shift preservation, insertion, skip, transfer preconditions, and final physical ordering.
+- [x] Execute a genuine solver counterexample in MuJoCo and reinfer until all obligations pass.
+- [x] Add fault detection, regression tests, an executed report notebook, an HTML export, and measured loop-state visualization.
+
+The first round used 32 successful physical runs (142 training and 140 held-out
+snapshots). Its learned formulas passed trace evaluation, but buffer-entry
+preservation failed. The solver exposed row keys `[1, 0, 1, 1]` at `i=1`: the
+candidate incorrectly excluded equal-key pairs in the untouched suffix. The
+archived report is `robotic_insertion_sort_refinement_0.json`. A real physical
+run of that counterexample added six training snapshots; no clause was manually
+deleted and no verification assumption was weakened.
+
+The final corpus contains **33 physical runs**: 18 training runs / 148 snapshots
+and 15 held-out runs / 140 snapshots. All physical runs passed. The actual learned
+formulas contain 15 retained clauses across five projections (including repeated
+clauses across projections), with zero training/held-out violations. All seven
+target-entailment checks are UNSAT for the negated target; axioms and candidates
+are satisfiable. All nine abstract verification obligations have SAT premises
+and UNSAT counterexample queries. All 288 snapshots pass separately supplied
+structural checks. Five injected faults are detected by the learned formula,
+geometric validity checks, or structural checks, with the responsible layer named.
+
+The reorganized notebook has 13 numbered report sections, 33 cells, and 18 code
+cells executed in order from a fresh kernel with no errors. That execution reran
+the video and the entire 33-case physical corpus. The figure
+`robotic_insertion_sort_invariant_trace.png` shows all 13 measured boundaries of
+the reverse-order video. The MP4 remains H.264, 960x720, 12.5 fps, 1,050 frames,
+84 seconds; complete decoding passed and a midpoint frame and the trace figure
+were visually inspected. An HTML report is saved as `robotic_insertion_sort.html`.
+
+Validation: **47 tests passed** across sorting, tracing, inference, abstract
+verification, existing relational inference, and existing BMC. Tests include a
+regression for the discovered equal-suffix overfit and negative controls for
+identity/geometry/index errors. Exported outer and inner SMT files are separate
+because loop invariants hold at different program points.
+
+Guarantee: the learned formulas, conjoined with explicit structural conditions,
+are inductive for the supplied four-block symbolic model with arbitrary integer
+keys, conditional on successful transfers and preservation of other occupancies.
+This does not prove the Python-to-model translation, continuous controller/grasp
+success, physical deployment, arbitrary block counts, or equal-key stability.
+Physical final-state checks do test stable outputs on the collected runs.
+
+```bash
+unset LD_PRELOAD
+uv run python3 -m synthesis.examples.robotic_sort_experiment
+uv run python3 -m unittest synthesis.examples.test_robotic_insertion_sort synthesis.examples.test_robotic_sort_traces synthesis.examples.test_robotic_sort_inference synthesis.examples.test_robotic_sort_verification synthesis.inference_lib.test_relational_inference synthesis.verification_lib.test_bmc_lib -v
+uv run python3 -m jupyter nbconvert --to notebook --execute notebooks/robotic_insertion_sort.ipynb --inplace --ExecutePreprocessor.timeout=600
+uv run python3 -m jupyter nbconvert --to html notebooks/robotic_insertion_sort.ipynb
+```

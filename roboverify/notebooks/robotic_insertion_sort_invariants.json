@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "training_snapshots": 148,
+  "held_out_snapshots": 140,
+  "physical_cases": 33,
+  "failed_cases": [],
+  "loops": {
+    "outer": {
+      "phase": "outer",
+      "elapsed_seconds": 4.6645490830997005,
+      "invariant": "(let ((a!1 (forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n             (or (not (Processed ux2)) (Before ux2 ux1) (Processed ux1))))\n      (a!2 (forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n             (or (not (Processed ux1)) (Before ux1 ux2) (KeyLE ux2 ux1))))\n      (a!3 (forall ((ux1 RoboticSortBlock)) (InRow ux1))))\n  (and a!1\n       a!2\n       (forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n         (or (Before ux1 ux2) (Before ux2 ux1) (= ux1 ux2)))\n       a!3\n       a!3\n       (forall ((ux1 RoboticSortBlock)) (AtAssignedSlot ux1))))",
+      "projections": {
+        "ordering": {
+          "vocabulary": [
+            "Processed(ux1)",
+            "Processed(ux2)",
+            "Before(ux1, ux2)",
+            "Before(ux2, ux1)",
+            "KeyLE(ux1, ux2)",
+            "KeyLE(ux2, ux1)",
+            "InRow(ux1)",
+            "InRow(ux2)",
+            "ux1 == ux2"
+          ],
+          "distinct_truth_rows": 18,
+          "clauses": [
+            "(forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n  (or (not (Processed ux2)) (Before ux2 ux1) (Processed ux1)))",
+            "(forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n  (or (not (Processed ux1)) (Before ux1 ux2) (KeyLE ux2 ux1)))",
+            "(forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n  (or (Before ux1 ux2) (Before ux2 ux1) (= ux1 ux2)))",
+            "(forall ((ux1 RoboticSortBlock)) (InRow ux1))"
+          ]
+        },
+        "physical": {
+          "vocabulary": [
+            "InRow(ux1)",
+            "InBuffer(ux1)",
+            "AtAssignedSlot(ux1)"
+          ],
+          "distinct_truth_rows": 1,
+          "clauses": [
+            "(forall ((ux1 RoboticSortBlock)) (InRow ux1))",
+            "(forall ((ux1 RoboticSortBlock)) (AtAssignedSlot ux1))"
+          ]
+        }
+      },
+      "training": {
+        "axioms_satisfiable": "sat",
+        "axioms_and_candidate_satisfiable": "sat",
+        "target_entailment": {
+          "sorted_prefix": "unsat",
+          "all_blocks_in_assigned_row_slots": "unsat",
+          "empty_buffer": "unsat"
+        },
+        "snapshots_checked": 72,
+        "violations": [],
+        "all_passed": true
+      },
+      "held_out": {
+        "axioms_satisfiable": "sat",
+        "axioms_and_candidate_satisfiable": "sat",
+        "target_entailment": {
+          "sorted_prefix": "unsat",
+          "all_blocks_in_assigned_row_slots": "unsat",
+          "empty_buffer": "unsat"
+        },
+        "snapshots_checked": 60,
+        "violations": [],
+        "all_passed": true
+      }
+    },
+    "inner": {
+      "phase": "inner",
+      "elapsed_seconds": 6.8691876659868285,
+      "invariant": "(let ((a!1 (forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n             (or (Active ux1) (not (Active ux2)) (not (Before ux1 ux2)))))\n      (a!2 (forall ((ux1 RoboticSortBlock)) (or (not (Active ux1)) (InRow ux1))))\n      (a!3 (forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n             (or (not (Active ux1)) (KeyLE ux2 ux1) (not (Before ux2 ux1)))))\n      (a!4 (forall ((ux1 RoboticSortBlock))\n             (or (not (Shifted ux1)) (not (KeyLE ux1 selected))))))\n  (and a!1\n       a!2\n       a!3\n       (forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n         (or (Before ux1 ux2) (InRow ux1) (InRow ux2) (= ux1 ux2)))\n       (forall ((ux1 RoboticSortBlock)) (or (InRow ux1) (= ux1 selected)))\n       (not (InRow selected))\n       (InBuffer selected)\n       (forall ((ux1 RoboticSortBlock))\n         (or (AtAssignedSlot ux1) (= ux1 selected)))\n       a!4))",
+      "projections": {
+        "ordering": {
+          "vocabulary": [
+            "Active(ux1)",
+            "Active(ux2)",
+            "Before(ux1, ux2)",
+            "Before(ux2, ux1)",
+            "KeyLE(ux1, ux2)",
+            "KeyLE(ux2, ux1)",
+            "InRow(ux1)",
+            "InRow(ux2)",
+            "ux1 == ux2"
+          ],
+          "distinct_truth_rows": 31,
+          "clauses": [
+            "(forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n  (or (Active ux1) (not (Active ux2)) (not (Before ux1 ux2))))",
+            "(forall ((ux1 RoboticSortBlock)) (or (not (Active ux1)) (InRow ux1)))",
+            "(forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n  (or (not (Active ux1)) (KeyLE ux2 ux1) (not (Before ux2 ux1))))",
+            "(forall ((ux1 RoboticSortBlock) (ux2 RoboticSortBlock))\n  (or (Before ux1 ux2) (InRow ux1) (InRow ux2) (= ux1 ux2)))"
+          ]
+        },
+        "physical": {
+          "vocabulary": [
+            "InRow(ux1)",
+            "InRow(selected)",
+            "InBuffer(ux1)",
+            "InBuffer(selected)",
+            "AtAssignedSlot(ux1)",
+            "AtAssignedSlot(selected)",
+            "ux1 == selected"
+          ],
+          "distinct_truth_rows": 2,
+          "clauses": [
+            "(forall ((ux1 RoboticSortBlock)) (or (InRow ux1) (= ux1 selected)))",
+            "(not (InRow selected))",
+            "(InBuffer selected)",
+            "(forall ((ux1 RoboticSortBlock)) (or (AtAssignedSlot ux1) (= ux1 selected)))"
+          ]
+        },
+        "shifted_comparison": {
+          "vocabulary": [
+            "Shifted(ux1)",
+            "Shifted(selected)",
+            "KeyLE(ux1, selected)",
+            "KeyLE(selected, ux1)",
+            "ux1 == selected"
+          ],
+          "distinct_truth_rows": 5,
+          "clauses": [
+            "(forall ((ux1 RoboticSortBlock))\n  (or (not (Shifted ux1)) (not (KeyLE ux1 selected))))"
+          ]
+        }
+      },
+      "training": {
+        "axioms_satisfiable": "sat",
+        "axioms_and_candidate_satisfiable": "sat",
+        "target_entailment": {
+          "sorted_occupied_active_region": "unsat",
+          "shifted_keys_strictly_greater": "unsat",
+          "selected_is_the_only_buffered_block": "unsat",
+          "other_blocks_in_assigned_row_slots": "unsat"
+        },
+        "snapshots_checked": 76,
+        "violations": [],
+        "all_passed": true
+      },
+      "held_out": {
+        "axioms_satisfiable": "sat",
+        "axioms_and_candidate_satisfiable": "sat",
+        "target_entailment": {
+          "sorted_occupied_active_region": "unsat",
+          "shifted_keys_strictly_greater": "unsat",
+          "selected_is_the_only_buffered_block": "unsat",
+          "other_blocks_in_assigned_row_slots": "unsat"
+        },
+        "snapshots_checked": 80,
+        "violations": [],
+        "all_passed": true
+      }
+    }
+  },
+  "structural_validation": {
+    "snapshots_checked": 288,
+    "violations": [],
+    "status": "supplied checks, not learned invariant clauses"
+  },
+  "abstract_verification": {
+    "all_passed": true,
+    "block_count": 4,
+    "key_domain": "unbounded mathematical integers; duplicate keys included",
+    "method": "finite object grounding of the actual learned formulas; symbolic induction",
+    "structural_invariant": [
+      "outer row is a permutation of all block identities; 1 <= i <= n",
+      "inner row contains every block except selected once, with one vacancy at j + 1",
+      "inner bounds: 1 <= i < n and -1 <= j < i",
+      "distinct physical occupancies in row slots 0..n-1 or buffer -1"
+    ],
+    "transfer_contract": [
+      "source contains the named block and destination is empty (checked before each transfer)",
+      "successful transfer places that block at destination and frames other block occupancies",
+      "gripper is empty at sampled loop boundaries; safe reach and grasp success assumed"
+    ],
+    "guarantee_boundary": "Fixed-size abstract partial correctness under successful-transfer contracts; does not prove the Python-to-model translation, MuJoCo controller, physical robot, arbitrary block counts, or stability of equal-key identities.",
+    "checks": [
+      {
+        "name": "outer_initialization",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "save_transfer_precondition",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_to_inner_after_buffering",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "shift_transfer_precondition",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_shift_preservation",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "insert_transfer_precondition",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_exit_restores_outer",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_skip_preservation",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "program_exit_sorted_and_physically_realized",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      }
+    ]
+  },
+  "fault_detection": [
+    {
+      "fault": "physical/logical mismatch",
+      "detected": true,
+      "layer": "actual learned formula"
+    },
+    {
+      "fault": "physically realized but unsorted row",
+      "detected": true,
+      "layer": "actual learned formula"
+    },
+    {
+      "fault": "incorrect selected-block identity",
+      "detected": true,
+      "layer": "actual learned formula"
+    },
+    {
+      "fault": "block outside every valid location",
+      "detected": true,
+      "layer": "geometric abstraction validity"
+    },
+    {
+      "fault": "wrong vacancy index",
+      "detected": true,
+      "layer": "explicit structural check"
+    }
+  ],
+  "all_passed": true
+}
