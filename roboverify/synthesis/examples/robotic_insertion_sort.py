@@ -47,25 +47,45 @@ def insertion_sort_blocks(
         The same list, sorted in place by ascending key. On successful return,
         every element is a block name (there are no remaining None entries).
     """
+    # Insert each block into the sorted prefix order[:i]; a single first block is already sorted.
     for i in range(1, len(order)):
+        # Save this block's name; cast tells the type checker it is str without converting or checking it.
         selected = cast(str, order[i])
+        # Look up sorting keys by block name: if the largest prefix key is <= this key, it already fits.
         if keys[cast(str, order[i - 1])] <= keys[selected]:
+            # Skip all movement for this block and proceed to the next outer-loop iteration.
             continue
+        # Pick, move, and release the selected block in the buffer; the f-string describes this action.
         robot.transfer(selected, buffer_position, f"i={i}: save key {keys[selected]} in buffer")
+        # Record the newly empty row slot; the selected block's name is still stored in selected.
         order[i] = None
+        # Check that every named block in order is physically at its assigned slot, within tolerance.
         robot.check_slots(order)
+        # Start comparing with the rightmost block of the sorted prefix.
         j = i - 1
+        # Scan left while keys are larger; j >= 0 prevents negative indexing, and > preserves equal-key order.
         while j >= 0 and keys[cast(str, order[j])] > keys[selected]:
+            # Remember the name of the larger block that must move one slot to the right.
             shifted = cast(str, order[j])
+            # Physically transfer that block into the empty slot at j + 1, using its target XYZ coordinates.
             robot.transfer(shifted, slots[j + 1], f"i={i}: shift key {keys[shifted]} from slot {j} to {j + 1}")
+            # Update the destination's logical occupant after the physical transfer succeeds.
             order[j + 1] = shifted
+            # Mark the source slot empty: the vacancy has moved one slot to the left.
             order[j] = None
+            # Verify that the simulator's block positions agree with the updated occupied slots.
             robot.check_slots(order)
+            # Move left to compare the next prefix block; -1 means the selected block belongs in slot 0.
             j -= 1
+        # Move the buffered block into the vacancy, after all smaller or equal keys in the prefix.
         robot.transfer(selected, slots[j + 1], f"i={i}: insert key {keys[selected]} into slot {j + 1}")
+        # Record the selected block in its insertion slot; the row now has no vacancy.
         order[j + 1] = selected
+        # Verify all occupied slots again after completing the insertion.
         robot.check_slots(order)
+        # Check every adjacent key pair in order[:i + 1]; raise AssertionError if this prefix is unsorted.
         assert all(keys[cast(str, order[k])] <= keys[cast(str, order[k + 1])] for k in range(i))
+    # Return the same, now-sorted list; cast declares that no None entries remain without copying the list.
     return cast(list[str], order)
 
 
