@@ -5,32 +5,58 @@ the MuJoCo simulation through env.step; object motion comes from contact.
 """
 
 from pathlib import Path
+from collections.abc import Mapping, Sequence
 import shutil
 import subprocess
+from typing import Protocol, cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 def block_position(env, name):
     return env.sim.data.get_site_xpos(name).copy()
 
 
-def insertion_sort_blocks(order, keys, slots, buffer_position, robot):
+class BlockTransferRobot(Protocol):
+    """The two robot operations required by the sorting algorithm."""
+
+    def transfer(self, name: str, target: NDArray[np.float64], description: str) -> None: ...
+
+    def check_slots(self, order: Sequence[str | None]) -> None: ...
+
+
+def insertion_sort_blocks(
+    order: list[str | None],
+    keys: Mapping[str, int],
+    slots: NDArray[np.float64],
+    buffer_position: NDArray[np.float64],
+    robot: BlockTransferRobot,
+) -> list[str]:
     """Stable insertion sort with a physical buffer for the selected block.
 
-    `order` is the mutable slot-to-block mapping. A None marks the empty slot.
-    `robot` supplies transfer(name, target, description) and check_slots(order).
+    Args:
+        order: Mutable slot-to-block-name list, populated with strings on entry.
+            During sorting, None temporarily marks the empty slot.
+        keys: Mapping from each block name to its integer sorting key.
+        slots: Float64 array of shape (len(order), 3), containing slot XYZ positions.
+        buffer_position: Float64 array of shape (3,), containing the buffer XYZ position.
+        robot: Object providing transfer() and check_slots(), such as TableRobot.
+
+    Returns:
+        The same list, sorted in place by ascending key. On successful return,
+        every element is a block name (there are no remaining None entries).
     """
     for i in range(1, len(order)):
-        selected = order[i]
-        if keys[order[i - 1]] <= keys[selected]:
+        selected = cast(str, order[i])
+        if keys[cast(str, order[i - 1])] <= keys[selected]:
             continue
         robot.transfer(selected, buffer_position, f"i={i}: save key {keys[selected]} in buffer")
         order[i] = None
         robot.check_slots(order)
         j = i - 1
-        while j >= 0 and keys[order[j]] > keys[selected]:
-            shifted = order[j]
+        while j >= 0 and keys[cast(str, order[j])] > keys[selected]:
+            shifted = cast(str, order[j])
             robot.transfer(shifted, slots[j + 1], f"i={i}: shift key {keys[shifted]} from slot {j} to {j + 1}")
             order[j + 1] = shifted
             order[j] = None
@@ -39,8 +65,8 @@ def insertion_sort_blocks(order, keys, slots, buffer_position, robot):
         robot.transfer(selected, slots[j + 1], f"i={i}: insert key {keys[selected]} into slot {j + 1}")
         order[j + 1] = selected
         robot.check_slots(order)
-        assert all(keys[order[k]] <= keys[order[k + 1]] for k in range(i))
-    return order
+        assert all(keys[cast(str, order[k])] <= keys[cast(str, order[k + 1])] for k in range(i))
+    return cast(list[str], order)
 
 
 class TableRobot:

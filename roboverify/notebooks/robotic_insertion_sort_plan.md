@@ -47,3 +47,11 @@ applied forces, and solver warm-start values in addition to legacy GT state.
 Scope: four simulated Fetch table cubes, unique keys 1–4. The simulator's measured
 poses provide feedback. The simulation demonstration does not establish physical
 robot deployment or formal correctness of the controller.
+
+## Type annotations (2026-09-09)
+
+Annotated all five inputs and the return value of `insertion_sort_blocks`, including
+a structural robot protocol and documented NumPy array shapes. The input list can
+temporarily contain a vacant slot; successful return contains only block names and
+preserves the original list object. Existing four algorithm tests and `git diff
+--check` passed. Runtime behavior is unchanged; the simulation video was not rerun.
