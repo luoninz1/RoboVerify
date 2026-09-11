@@ -1,0 +1,44 @@
+{
+  "notebook_cells": 22,
+  "executed_code_cells": 11,
+  "notebook_errors": 0,
+  "physical_runs": 33,
+  "training_snapshots": 170,
+  "held_out_snapshots": 155,
+  "learned_clause_counts": {
+    "outer": 2,
+    "inner": 17
+  },
+  "invariant_equivalence": {
+    "outer": true,
+    "inner": true
+  },
+  "abstract_obligations": 13,
+  "all_abstract_obligations_passed": true,
+  "demo_physics_steps": 2906,
+  "demo_transfers": 18,
+  "worst_corpus_slot_error_mm": 2.7473683041988712,
+  "smt_candidate_satisfiability": {
+    "outer": "sat",
+    "inner": "sat"
+  },
+  "html_embedded_video": true,
+  "video_validation": {
+    "codec": "h264",
+    "width": 960,
+    "height": 720,
+    "fps": 12.5,
+    "frames": 1477,
+    "duration_seconds": 118.16,
+    "full_ffmpeg_decode": "passed",
+    "visually_inspected": [
+      "measured trace figure",
+      "40-second video frame",
+      "final frame"
+    ]
+  },
+  "test_suite": {
+    "tests": 42,
+    "result": "passed"
+  }
+}

@@ -1,0 +1,460 @@
+{
+  "schema_version": 1,
+  "source_sha256": {
+    "relational_robotic_sort.py": "40fb6433435f60a1666f7ff8747b497325ab015b578a8e3e6cfd2ca63b8799a2",
+    "relational_sort_controller.py": "2eebb4dde8b833f8ac04e78b60ee7d3805edbb907ef587e6e43fe726cca8f79f"
+  },
+  "canonical_corpus_sha256": "9fdadda6b03d5a9bd8bab94b3abf10e9f40c6ada1f9d3ee79bee8417cdb88739",
+  "analysis_source_sha256": {
+    "synthesis/examples/relational_sort_experiment.py": "d1161b27cc36a196a103b93725c9d485ee6c981d8fe1071530592d1896f37be3",
+    "synthesis/examples/relational_sort_inference.py": "d2d46aa8d7cba1fe5bc12a3ead6d59da6cfd86dcbaf1be931363b73a48a96d2c",
+    "synthesis/examples/relational_sort_verification.py": "6999649bfde98181224ccd2c7a93e60e2251b71be2d59f396464a4d860249e05",
+    "synthesis/inference_lib/relational.py": "22e9fdb0b94d314704b3fd3105c20be03f0e4304c8a64f0a382cf3ef14d10a12",
+    "synthesis/inference_lib/inference.py": "8dc350c2bb82d91f2897c69db41e47a94bcf59a1860667f56baec25a447a3302"
+  },
+  "physical_runs": 33,
+  "training_runs": 18,
+  "held_out_runs": 15,
+  "failed_cases": [],
+  "training_snapshots": 170,
+  "held_out_snapshots": 155,
+  "loops": {
+    "outer": {
+      "phase": "outer",
+      "elapsed_seconds": 3.514275416964665,
+      "invariant": "(let ((a!1 (forall ((ux1 RelationalInsertionBlock)\n                    (ux2 RelationalInsertionBlock))\n             (or (BeforeB ux1) (not (BeforeB ux2)) (not (NextStar ux1 ux2)))))\n      (a!2 (forall ((ux1 RelationalInsertionBlock)\n                    (ux2 RelationalInsertionBlock))\n             (or (not (KeyLess ux1 ux2))\n                 (not (NextStar ux2 ux1))\n                 (not (BeforeB ux1))))))\n  (and a!1 a!2))",
+      "projections": {
+        "prefix_order": {
+          "vocabulary": [
+            "BeforeB(ux1)",
+            "BeforeB(ux2)",
+            "NextStar(ux1, ux2)",
+            "NextStar(ux2, ux1)",
+            "KeyLess(ux1, ux2)",
+            "KeyLess(ux2, ux1)",
+            "ux1 == ux2"
+          ],
+          "distinct_truth_rows": 18,
+          "clauses": [
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (BeforeB ux1) (not (BeforeB ux2)) (not (NextStar ux1 ux2))))",
+              "target_atom": "BeforeB(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (not (KeyLess ux1 ux2)) (not (NextStar ux2 ux1)) (not (BeforeB ux1))))",
+              "target_atom": "BeforeB(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            }
+          ]
+        }
+      },
+      "training": {
+        "snapshots_checked": 72,
+        "violations": [],
+        "all_passed": true
+      },
+      "held_out": {
+        "snapshots_checked": 60,
+        "violations": [],
+        "all_passed": true
+      },
+      "comparison": {
+        "scope": "First-order relational models under mathematical and feature-definition axioms; no fixed block count.",
+        "axioms_satisfiable": {
+          "status": "sat",
+          "model": "[b = RelationalInsertionBlock!val!0,\n BeforeB = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n KeyLess = [else -> False],\n NextStar = [else -> True]]"
+        },
+        "candidate_satisfiable": {
+          "status": "sat",
+          "model": "[b = RelationalInsertionBlock!val!0,\n BeforeB = [else -> True],\n KeyLess = [else -> False],\n NextStar = [else -> True]]"
+        },
+        "theory_satisfiable": {
+          "status": "sat",
+          "model": "[b = RelationalInsertionBlock!val!0,\n BeforeB = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n KeyLess = [else -> False],\n NextStar = [else -> True]]"
+        },
+        "joint_satisfiable": {
+          "status": "sat",
+          "model": "[b = RelationalInsertionBlock!val!0,\n BeforeB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n KeyLess = [else -> False],\n NextStar = [else ->\n             Not(And(Not(Var(0) ==\n                         RelationalInsertionBlock!val!0),\n                     Var(1) ==\n                     RelationalInsertionBlock!val!0))]]"
+        },
+        "learned_implies_each_target": {
+          "sorted_prefix": {
+            "status": "unsat"
+          }
+        },
+        "theory_implies_learned": {
+          "status": "unsat"
+        },
+        "target_formulas": {
+          "sorted_prefix": "(forall ((theory_u RelationalInsertionBlock)\n         (theory_v RelationalInsertionBlock))\n  (=> (and (NextStar theory_u theory_v) (NextStar theory_v b))\n      (not (KeyLess theory_v theory_u))))"
+        },
+        "targets_not_assumed": {
+          "sorted_prefix": {
+            "status": "sat",
+            "model": "[b = RelationalInsertionBlock!val!2,\n NextStar = [else ->\n             And(Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2))),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!2,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2))),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!2,\n                         Var(1) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2))))],\n BeforeB = [RelationalInsertionBlock!val!0 -> True,\n            RelationalInsertionBlock!val!1 -> True,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!2)],\n KeyLess = [else ->\n            And(Var(0) == RelationalInsertionBlock!val!0,\n                Not(Var(1) == RelationalInsertionBlock!val!0))]]"
+          }
+        },
+        "consistent": true,
+        "entails_theory": true,
+        "equivalent": true
+      }
+    },
+    "inner": {
+      "phase": "inner",
+      "elapsed_seconds": 6.436639958061278,
+      "invariant": "(let ((a!1 (forall ((ux1 RelationalInsertionBlock))\n             (or (BeforeB ux1) (BeforeR ux1) (not (IsX ux1)))))\n      (a!2 (forall ((ux1 RelationalInsertionBlock))\n             (or (BeforeB ux1) (IsX ux1) (not (BeforeR ux1)))))\n      (a!3 (forall ((ux1 RelationalInsertionBlock))\n             (or (not (BeforeB ux1)) (BeforeR ux1))))\n      (a!4 (forall ((ux1 RelationalInsertionBlock))\n             (or (not (IsB ux1)) (not (IsX ux1)))))\n      (a!5 (forall ((ux1 RelationalInsertionBlock))\n             (or (BeforeR ux1) (not (IsX ux1)))))\n      (a!6 (forall ((ux1 RelationalInsertionBlock)\n                    (ux2 RelationalInsertionBlock))\n             (or (BeforeR ux1) (not (BeforeR ux2)) (not (NextStar ux1 ux2)))))\n      (a!7 (forall ((ux1 RelationalInsertionBlock)\n                    (ux2 RelationalInsertionBlock))\n             (or (not (KeyLess ux2 ux1))\n                 (IsX ux2)\n                 (NextStar ux2 ux1)\n                 (IsX ux1)\n                 (not (BeforeR ux1))\n                 (KeyLess ux1 ux2)\n                 (not (BeforeR ux2)))))\n      (a!8 (forall ((ux1 RelationalInsertionBlock)\n                    (ux2 RelationalInsertionBlock))\n             (or (IsX ux2)\n                 (NextStar ux2 ux1)\n                 (not (BeforeR ux1))\n                 (KeyLess ux1 ux2)\n                 (not (BeforeR ux2))\n                 (KeyLess ux2 ux1)\n                 (not (IsX ux1)))))\n      (a!9 (forall ((ux1 RelationalInsertionBlock)\n                    (ux2 RelationalInsertionBlock))\n             (or (not (KeyLess ux2 ux1))\n                 (IsX ux2)\n                 (NextStar ux2 ux1)\n                 (not (BeforeR ux1))\n                 (KeyLess ux1 ux2)\n                 (not (BeforeR ux2))\n                 (not (IsX ux1)))))\n      (a!10 (forall ((ux1 RelationalInsertionBlock)\n                     (ux2 RelationalInsertionBlock))\n              (or (NextStar ux2 ux1)\n                  (not (BeforeR ux1))\n                  (KeyLess ux1 ux2)\n                  (not (BeforeR ux2))\n                  (KeyLess ux2 ux1)\n                  (not (IsX ux1))\n                  (not (IsX ux2)))))\n      (a!11 (forall ((ux1 RelationalInsertionBlock)\n                     (ux2 RelationalInsertionBlock))\n              (or (not (KeyLess ux2 ux1))\n                  (NextStar ux2 ux1)\n                  (not (BeforeR ux1))\n                  (KeyLess ux1 ux2)\n                  (not (BeforeR ux2))\n                  (not (IsX ux1))\n                  (not (IsX ux2)))))\n      (a!12 (forall ((ux1 RelationalInsertionBlock)\n                     (ux2 RelationalInsertionBlock))\n              (or (not (KeyLess ux1 ux2))\n                  (NextStar ux2 ux1)\n                  (not (BeforeR ux1))\n                  (not (BeforeR ux2))\n                  (KeyLess ux2 ux1)\n                  (not (IsX ux1))\n                  (not (IsX ux2)))))\n      (a!13 (forall ((ux1 RelationalInsertionBlock))\n              (or (not (BeforeR ux1)) (not (IsX ux1)) (AfterX ux1))))\n      (a!14 (forall ((ux1 RelationalInsertionBlock))\n              (or (not (BeforeR ux1)) (not (IsX ux1)) (not (SelectedLess ux1)))))\n      (a!15 (forall ((ux1 RelationalInsertionBlock))\n              (or (IsX ux1)\n                  (not (BeforeR ux1))\n                  (SelectedLess ux1)\n                  (not (AfterX ux1))))))\n  (and a!1\n       a!2\n       a!3\n       a!4\n       a!5\n       a!6\n       a!7\n       a!8\n       a!9\n       a!10\n       a!11\n       a!12\n       (forall ((ux1 RelationalInsertionBlock)) (or (BeforeR ux1) (AfterX ux1)))\n       a!5\n       a!13\n       a!14\n       a!15))",
+      "projections": {
+        "boundary": {
+          "vocabulary": [
+            "BeforeB(ux1)",
+            "BeforeR(ux1)",
+            "IsX(ux1)"
+          ],
+          "distinct_truth_rows": 4,
+          "clauses": [
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock))\n  (or (BeforeB ux1) (BeforeR ux1) (not (IsX ux1))))",
+              "target_atom": "BeforeB(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock))\n  (or (BeforeB ux1) (IsX ux1) (not (BeforeR ux1))))",
+              "target_atom": "BeforeB(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock)) (or (not (BeforeB ux1)) (BeforeR ux1)))",
+              "target_atom": "BeforeB(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            }
+          ]
+        },
+        "distinct_cursors": {
+          "vocabulary": [
+            "IsB(ux1)",
+            "IsX(ux1)"
+          ],
+          "distinct_truth_rows": 3,
+          "clauses": [
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock)) (or (not (IsB ux1)) (not (IsX ux1))))",
+              "target_atom": "IsB(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            }
+          ]
+        },
+        "order_except_selected": {
+          "vocabulary": [
+            "BeforeR(ux1)",
+            "BeforeR(ux2)",
+            "IsX(ux1)",
+            "IsX(ux2)",
+            "NextStar(ux1, ux2)",
+            "NextStar(ux2, ux1)",
+            "KeyLess(ux1, ux2)",
+            "KeyLess(ux2, ux1)",
+            "ux1 == ux2"
+          ],
+          "distinct_truth_rows": 33,
+          "clauses": [
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock)) (or (BeforeR ux1) (not (IsX ux1))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (BeforeR ux1) (not (BeforeR ux2)) (not (NextStar ux1 ux2))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (not (KeyLess ux2 ux1))\n      (IsX ux2)\n      (NextStar ux2 ux1)\n      (IsX ux1)\n      (not (BeforeR ux1))\n      (KeyLess ux1 ux2)\n      (not (BeforeR ux2))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (IsX ux2)\n      (NextStar ux2 ux1)\n      (not (BeforeR ux1))\n      (KeyLess ux1 ux2)\n      (not (BeforeR ux2))\n      (KeyLess ux2 ux1)\n      (not (IsX ux1))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (not (KeyLess ux2 ux1))\n      (IsX ux2)\n      (NextStar ux2 ux1)\n      (not (BeforeR ux1))\n      (KeyLess ux1 ux2)\n      (not (BeforeR ux2))\n      (not (IsX ux1))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (NextStar ux2 ux1)\n      (not (BeforeR ux1))\n      (KeyLess ux1 ux2)\n      (not (BeforeR ux2))\n      (KeyLess ux2 ux1)\n      (not (IsX ux1))\n      (not (IsX ux2))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (not (KeyLess ux2 ux1))\n      (NextStar ux2 ux1)\n      (not (BeforeR ux1))\n      (KeyLess ux1 ux2)\n      (not (BeforeR ux2))\n      (not (IsX ux1))\n      (not (IsX ux2))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock) (ux2 RelationalInsertionBlock))\n  (or (not (KeyLess ux1 ux2))\n      (NextStar ux2 ux1)\n      (not (BeforeR ux1))\n      (not (BeforeR ux2))\n      (KeyLess ux2 ux1)\n      (not (IsX ux1))\n      (not (IsX ux2))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            }
+          ]
+        },
+        "passed_blocks": {
+          "vocabulary": [
+            "BeforeR(ux1)",
+            "AfterX(ux1)",
+            "IsX(ux1)",
+            "SelectedLess(ux1)"
+          ],
+          "distinct_truth_rows": 6,
+          "clauses": [
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock)) (or (BeforeR ux1) (AfterX ux1)))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock)) (or (BeforeR ux1) (not (IsX ux1))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock))\n  (or (not (BeforeR ux1)) (not (IsX ux1)) (AfterX ux1)))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock))\n  (or (not (BeforeR ux1)) (not (IsX ux1)) (not (SelectedLess ux1))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            },
+            {
+              "expression": "(forall ((ux1 RelationalInsertionBlock))\n  (or (IsX ux1) (not (BeforeR ux1)) (SelectedLess ux1) (not (AfterX ux1))))",
+              "target_atom": "BeforeR(ux1)",
+              "learned_via": "phi_prime",
+              "omega_index": 0
+            }
+          ]
+        }
+      },
+      "training": {
+        "snapshots_checked": 98,
+        "violations": [],
+        "all_passed": true
+      },
+      "held_out": {
+        "snapshots_checked": 95,
+        "violations": [],
+        "all_passed": true
+      },
+      "comparison": {
+        "scope": "First-order relational models under mathematical and feature-definition axioms; no fixed block count.",
+        "axioms_satisfiable": {
+          "status": "sat",
+          "model": "[r = RelationalInsertionBlock!val!0,\n b = RelationalInsertionBlock!val!0,\n x = RelationalInsertionBlock!val!0,\n BeforeB = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n IsX = [else -> Var(0) == RelationalInsertionBlock!val!0],\n AfterX = [else ->\n           NextStar(RelationalInsertionBlock!val!0, Var(0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n NextStar = [else -> True],\n BeforeR = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n KeyLess = [else -> False],\n SelectedLess = [else ->\n                 KeyLess(RelationalInsertionBlock!val!0,\n                         Var(0))]]"
+        },
+        "candidate_satisfiable": {
+          "status": "sat",
+          "model": "[r = RelationalInsertionBlock!val!1,\n b = RelationalInsertionBlock!val!0,\n x = RelationalInsertionBlock!val!1,\n BeforeB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n BeforeR = [else -> True],\n NextStar = [else ->\n             Not(And(Not(Var(0) ==\n                         RelationalInsertionBlock!val!0),\n                     Var(1) ==\n                     RelationalInsertionBlock!val!0))],\n KeyLess = [else -> False],\n IsX = [else ->\n        Not(Var(0) == RelationalInsertionBlock!val!0)],\n SelectedLess = [else -> False],\n AfterX = [else ->\n           Not(Var(0) == RelationalInsertionBlock!val!0)]]"
+        },
+        "theory_satisfiable": {
+          "status": "sat",
+          "model": "[r = RelationalInsertionBlock!val!1,\n b = RelationalInsertionBlock!val!0,\n x = RelationalInsertionBlock!val!1,\n BeforeB = [RelationalInsertionBlock!val!1 -> False,\n            RelationalInsertionBlock!val!0 -> True,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n IsX = [else -> Var(0) == RelationalInsertionBlock!val!1],\n BeforeR = [RelationalInsertionBlock!val!1 -> True,\n            RelationalInsertionBlock!val!0 -> True,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!1)],\n SelectedLess = [RelationalInsertionBlock!val!1 -> False,\n                 RelationalInsertionBlock!val!0 -> False,\n                 else ->\n                 KeyLess(RelationalInsertionBlock!val!1,\n                         Var(0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n AfterX = [RelationalInsertionBlock!val!0 -> False,\n           RelationalInsertionBlock!val!1 -> True,\n           else ->\n           NextStar(RelationalInsertionBlock!val!1, Var(0))],\n KeyLess = [else -> False],\n NextStar = [else ->\n             Not(And(Var(0) ==\n                     RelationalInsertionBlock!val!1,\n                     Not(Var(1) ==\n                         RelationalInsertionBlock!val!1)))]]"
+        },
+        "joint_satisfiable": {
+          "status": "sat",
+          "model": "[r = RelationalInsertionBlock!val!1,\n b = RelationalInsertionBlock!val!0,\n x = RelationalInsertionBlock!val!1,\n BeforeB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n BeforeR = [else -> True],\n NextStar = [else ->\n             Not(And(Not(Var(0) ==\n                         RelationalInsertionBlock!val!0),\n                     Var(1) ==\n                     RelationalInsertionBlock!val!0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n KeyLess = [else -> False],\n IsX = [else ->\n        Not(Var(0) == RelationalInsertionBlock!val!0)],\n SelectedLess = [else -> False],\n AfterX = [else ->\n           Not(Var(0) == RelationalInsertionBlock!val!0)]]"
+        },
+        "learned_implies_each_target": {
+          "distinct_b_x": {
+            "status": "unsat"
+          },
+          "prefix_boundary": {
+            "status": "unsat"
+          },
+          "sorted_except_x": {
+            "status": "unsat"
+          },
+          "passed_blocks_strictly_larger": {
+            "status": "unsat"
+          }
+        },
+        "theory_implies_learned": {
+          "status": "unsat"
+        },
+        "target_formulas": {
+          "distinct_b_x": "(distinct b x)",
+          "prefix_boundary": "(forall ((theory_u RelationalInsertionBlock))\n  (= (NextStar theory_u r) (or (NextStar theory_u b) (= theory_u x))))",
+          "sorted_except_x": "(forall ((theory_u RelationalInsertionBlock)\n         (theory_v RelationalInsertionBlock))\n  (=> (and (distinct theory_u x)\n           (distinct theory_v x)\n           (NextStar theory_u theory_v)\n           (NextStar theory_v r))\n      (not (KeyLess theory_v theory_u))))",
+          "passed_blocks_strictly_larger": "(forall ((theory_u RelationalInsertionBlock))\n  (=> (and (distinct theory_u x) (NextStar x theory_u) (NextStar theory_u r))\n      (KeyLess x theory_u)))"
+        },
+        "targets_not_assumed": {
+          "distinct_b_x": {
+            "status": "sat",
+            "model": "[r = RelationalInsertionBlock!val!0,\n b = RelationalInsertionBlock!val!0,\n x = RelationalInsertionBlock!val!0,\n BeforeB = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n IsX = [else -> Var(0) == RelationalInsertionBlock!val!0],\n AfterX = [else ->\n           NextStar(RelationalInsertionBlock!val!0, Var(0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n NextStar = [else -> True],\n BeforeR = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n KeyLess = [else -> False],\n SelectedLess = [else ->\n                 KeyLess(RelationalInsertionBlock!val!0,\n                         Var(0))]]"
+          },
+          "prefix_boundary": {
+            "status": "sat",
+            "model": "[x = RelationalInsertionBlock!val!3,\n r = RelationalInsertionBlock!val!1,\n b = RelationalInsertionBlock!val!2,\n BeforeB = [RelationalInsertionBlock!val!0 -> False,\n            RelationalInsertionBlock!val!1 -> False,\n            RelationalInsertionBlock!val!3 -> False,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!2)],\n IsX = [else -> Var(0) == RelationalInsertionBlock!val!3],\n AfterX = [RelationalInsertionBlock!val!0 -> True,\n           RelationalInsertionBlock!val!1 -> True,\n           RelationalInsertionBlock!val!2 -> False,\n           else ->\n           NextStar(RelationalInsertionBlock!val!3, Var(0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!2],\n SelectedLess = [else ->\n                 KeyLess(RelationalInsertionBlock!val!3,\n                         Var(0))],\n BeforeR = [RelationalInsertionBlock!val!0 -> True,\n            RelationalInsertionBlock!val!1 -> True,\n            RelationalInsertionBlock!val!2 -> True,\n            RelationalInsertionBlock!val!3 -> True,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!1)],\n NextStar = [else ->\n             And(Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!1,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!3),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!3)),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!3,\n                         Var(1) ==\n                         RelationalInsertionBlock!val!2,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!3))),\n                 Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!3),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!3)),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!1,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!3),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!2,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!3))),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!1,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!3),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!1),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!3))),\n                 Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!3),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!2,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!3))))],\n KeyLess = [else -> False]]"
+          },
+          "sorted_except_x": {
+            "status": "sat",
+            "model": "[r = RelationalInsertionBlock!val!3,\n x = RelationalInsertionBlock!val!2,\n b = RelationalInsertionBlock!val!1,\n BeforeB = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!1)],\n IsX = [else -> Var(0) == RelationalInsertionBlock!val!2],\n BeforeR = [RelationalInsertionBlock!val!0 -> True,\n            RelationalInsertionBlock!val!1 -> True,\n            RelationalInsertionBlock!val!3 -> True,\n            RelationalInsertionBlock!val!2 -> True,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!3)],\n AfterX = [RelationalInsertionBlock!val!2 -> True,\n           RelationalInsertionBlock!val!1 -> True,\n           RelationalInsertionBlock!val!3 -> True,\n           RelationalInsertionBlock!val!0 -> True,\n           else ->\n           NextStar(RelationalInsertionBlock!val!2, Var(0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!1],\n NextStar = [else ->\n             And(Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!1,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!2)),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!2)),\n                 Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!2)),\n                 Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!1,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2))),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!1,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2))),\n                 Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!2),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!2))))],\n KeyLess = [else ->\n            And(Var(0) == RelationalInsertionBlock!val!0,\n                Not(Var(1) == RelationalInsertionBlock!val!0))],\n SelectedLess = [else ->\n                 KeyLess(RelationalInsertionBlock!val!2,\n                         Var(0))]]"
+          },
+          "passed_blocks_strictly_larger": {
+            "status": "sat",
+            "model": "[r = RelationalInsertionBlock!val!2,\n x = RelationalInsertionBlock!val!1,\n b = RelationalInsertionBlock!val!0,\n BeforeB = [else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!0)],\n IsX = [else -> Var(0) == RelationalInsertionBlock!val!1],\n BeforeR = [RelationalInsertionBlock!val!0 -> True,\n            RelationalInsertionBlock!val!1 -> True,\n            else ->\n            NextStar(Var(0), RelationalInsertionBlock!val!2)],\n SelectedLess = [RelationalInsertionBlock!val!0 -> False,\n                 else ->\n                 KeyLess(RelationalInsertionBlock!val!1,\n                         Var(0))],\n IsB = [else -> Var(0) == RelationalInsertionBlock!val!0],\n AfterX = [RelationalInsertionBlock!val!0 -> True,\n           RelationalInsertionBlock!val!2 -> True,\n           else ->\n           NextStar(RelationalInsertionBlock!val!1, Var(0))],\n KeyLess = [else -> False],\n NextStar = [else ->\n             And(Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!1)),\n                 Not(And(Var(0) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!1)),\n                 Not(And(Not(Var(0) ==\n                             RelationalInsertionBlock!val!0),\n                         Not(Var(0) ==\n                             RelationalInsertionBlock!val!1),\n                         Var(1) ==\n                         RelationalInsertionBlock!val!0,\n                         Not(Var(1) ==\n                             RelationalInsertionBlock!val!1))))]]"
+          }
+        },
+        "consistent": true,
+        "entails_theory": true,
+        "equivalent": true
+      }
+    }
+  },
+  "abstract_verification": {
+    "all_passed": true,
+    "block_count": 4,
+    "key_domain": "arbitrary mathematical integers, including duplicate keys",
+    "method": "finite object grounding of actual learned formulas; symbolic transition induction",
+    "structural_assumptions": [
+      "positions form a permutation of row slots 0..n-1 at each loop head",
+      "b, x, r identify existing nodes; each node and its key are conserved",
+      "NextStar is reflexive position order; the row is a finite single chain"
+    ],
+    "transfer_contract": [
+      "each completed successful pick/move/release moves its named node to an empty destination",
+      "other node positions and every key are unchanged by each completed transfer",
+      "x goes to buffer -1, p goes to x's old slot, x goes to p's old slot",
+      "each transfer finishes with an empty gripper; buffer is empty at loop heads"
+    ],
+    "termination_argument": "x's position decreases each inner step; the enlarged prefix has exactly one additional position per completed outer step",
+    "guarantee_boundary": "Fixed-n abstract correctness and termination under successful-transfer contracts. This does not prove source-to-model translation, continuous motion/grasp success, physical deployment, or arbitrary n. Loop-head formulas are not asserted mid-transfer.",
+    "checks": [
+      {
+        "name": "outer_initialization",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_to_inner_r_equals_x",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "transfer_x_to_empty_buffer",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "transfer_p_to_vacated_x_slot",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "transfer_x_from_buffer_to_vacated_p_slot",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "three_transfers_realize_adjacent_swap",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_swap_preservation",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_exit_restores_outer",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_exit_global_sorted",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_entry_extends_prefix_by_one",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_swap_decreases_selected_position",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_swap_preserves_enlarged_prefix_size",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_update_installs_enlarged_prefix",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      }
+    ],
+    "semantic_comparison": [
+      {
+        "name": "outer_learned_implies_theory",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "outer_theory_implies_learned",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_learned_implies_theory",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      },
+      {
+        "name": "inner_theory_implies_learned",
+        "status": "unsat",
+        "antecedent_status": "sat",
+        "passed": true
+      }
+    ]
+  },
+  "all_passed": true,
+  "scope": "Training and held-out evidence comes from actual simulation. Logical implication/equivalence uses the explicit domain axioms. Inductiveness uses a fixed four-node model with arbitrary integer keys and successful, frame-preserving transfers. This is not automatic Python or continuous-controller verification, nor a physical deployment guarantee."
+}

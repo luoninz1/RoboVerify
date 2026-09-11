@@ -1,0 +1,1372 @@
+{
+  "source": "fresh actual Fetch simulation",
+  "initial_order": [
+    "object0",
+    "object1",
+    "object2",
+    "object3"
+  ],
+  "keys": {
+    "object0": 4,
+    "object1": 3,
+    "object2": 2,
+    "object3": 1
+  },
+  "final_order": [
+    "object3",
+    "object2",
+    "object1",
+    "object0"
+  ],
+  "steps": 2906,
+  "transfers": [
+    {
+      "block": "object1",
+      "key": 3,
+      "description": "Insert key 3: pass key 4",
+      "target": [
+        1.2643640901073658,
+        0.7491142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.2656372044989028,
+        0.7490650097578185,
+        0.424892244582367
+      ],
+      "start_step": 0,
+      "end_step": 172
+    },
+    {
+      "block": "object0",
+      "key": 4,
+      "description": "Insert key 3: pass key 4",
+      "target": [
+        1.4443640901073658,
+        0.6941142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4454658531046385,
+        0.6941113634046515,
+        0.42489224457979274
+      ],
+      "start_step": 172,
+      "end_step": 330
+    },
+    {
+      "block": "object1",
+      "key": 3,
+      "description": "Insert key 3: pass key 4",
+      "target": [
+        1.4443640901073658,
+        0.5841142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.447091793945255,
+        0.5840167070967134,
+        0.4248922445797931
+      ],
+      "start_step": 330,
+      "end_step": 496
+    },
+    {
+      "block": "object2",
+      "key": 2,
+      "description": "Insert key 2: pass key 4",
+      "target": [
+        1.2643640901073658,
+        0.7491142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.266872121231184,
+        0.7491639580595553,
+        0.4248922445797926
+      ],
+      "start_step": 496,
+      "end_step": 663
+    },
+    {
+      "block": "object0",
+      "key": 4,
+      "description": "Insert key 2: pass key 4",
+      "target": [
+        1.4443640901073658,
+        0.804114246761671,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4450814053177878,
+        0.8040103489539342,
+        0.42489224457979274
+      ],
+      "start_step": 663,
+      "end_step": 822
+    },
+    {
+      "block": "object2",
+      "key": 2,
+      "description": "Insert key 2: pass key 4",
+      "target": [
+        1.4443640901073658,
+        0.6941142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4464051314400608,
+        0.6940464177389212,
+        0.4248922445797933
+      ],
+      "start_step": 822,
+      "end_step": 987
+    },
+    {
+      "block": "object2",
+      "key": 2,
+      "description": "Insert key 2: pass key 3",
+      "target": [
+        1.2643640901073658,
+        0.7491142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.2664490163166127,
+        0.7490240642527847,
+        0.424892244579793
+      ],
+      "start_step": 987,
+      "end_step": 1135
+    },
+    {
+      "block": "object1",
+      "key": 3,
+      "description": "Insert key 2: pass key 3",
+      "target": [
+        1.4443640901073658,
+        0.6941142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4454601765466542,
+        0.6940299958349521,
+        0.42489224457979335
+      ],
+      "start_step": 1135,
+      "end_step": 1294
+    },
+    {
+      "block": "object2",
+      "key": 2,
+      "description": "Insert key 2: pass key 3",
+      "target": [
+        1.4443640901073658,
+        0.5841142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4469316993353072,
+        0.5842284276764788,
+        0.42489224457979313
+      ],
+      "start_step": 1294,
+      "end_step": 1460
+    },
+    {
+      "block": "object3",
+      "key": 1,
+      "description": "Insert key 1: pass key 4",
+      "target": [
+        1.2643640901073658,
+        0.7491142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.2674620155927472,
+        0.749294686885966,
+        0.4248922445797927
+      ],
+      "start_step": 1460,
+      "end_step": 1638
+    },
+    {
+      "block": "object0",
+      "key": 4,
+      "description": "Insert key 1: pass key 4",
+      "target": [
+        1.4443640901073658,
+        0.914114246761671,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.44529618581879,
+        0.9142348044855089,
+        0.4248922445797925
+      ],
+      "start_step": 1638,
+      "end_step": 1797
+    },
+    {
+      "block": "object3",
+      "key": 1,
+      "description": "Insert key 1: pass key 4",
+      "target": [
+        1.4443640901073658,
+        0.804114246761671,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.446162284583514,
+        0.8042426463124949,
+        0.4248922445797926
+      ],
+      "start_step": 1797,
+      "end_step": 1962
+    },
+    {
+      "block": "object3",
+      "key": 1,
+      "description": "Insert key 1: pass key 3",
+      "target": [
+        1.2643640901073658,
+        0.7491142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.2666316152551158,
+        0.7491288715991795,
+        0.42489224457979247
+      ],
+      "start_step": 1962,
+      "end_step": 2110
+    },
+    {
+      "block": "object1",
+      "key": 3,
+      "description": "Insert key 1: pass key 3",
+      "target": [
+        1.4443640901073658,
+        0.804114246761671,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4454052150676613,
+        0.8041611111645255,
+        0.42489224457979236
+      ],
+      "start_step": 2110,
+      "end_step": 2269
+    },
+    {
+      "block": "object3",
+      "key": 1,
+      "description": "Insert key 1: pass key 3",
+      "target": [
+        1.4443640901073658,
+        0.6941142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4461727213329754,
+        0.694005949319756,
+        0.42489224457979213
+      ],
+      "start_step": 2269,
+      "end_step": 2434
+    },
+    {
+      "block": "object3",
+      "key": 1,
+      "description": "Insert key 1: pass key 2",
+      "target": [
+        1.2643640901073658,
+        0.7491142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.2665073202467843,
+        0.7490250372271364,
+        0.42489224457979263
+      ],
+      "start_step": 2434,
+      "end_step": 2582
+    },
+    {
+      "block": "object2",
+      "key": 2,
+      "description": "Insert key 1: pass key 2",
+      "target": [
+        1.4443640901073658,
+        0.6941142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4454001676032122,
+        0.6941101733799638,
+        0.42489224457979285
+      ],
+      "start_step": 2582,
+      "end_step": 2741
+    },
+    {
+      "block": "object3",
+      "key": 1,
+      "description": "Insert key 1: pass key 2",
+      "target": [
+        1.4443640901073658,
+        0.5841142467616709,
+        0.42463307711707404
+      ],
+      "actual": [
+        1.4467168666393135,
+        0.5842590079259639,
+        0.4248922445797932
+      ],
+      "start_step": 2741,
+      "end_step": 2906
+    }
+  ],
+  "snapshots": [
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "b": "object0",
+      "x": null,
+      "r": null,
+      "program_point": "outer_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4443640901073658,
+            0.5841142467616709,
+            0.42463307711707404
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.4443640901073658,
+            0.6941142467616709,
+            0.42463307711707404
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4443640901073658,
+            0.804114246761671,
+            0.42463307711707404
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.42463307711707404
+          ]
+        ]
+      ],
+      "step": 0,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "b": "object0",
+      "x": "object1",
+      "r": "object1",
+      "program_point": "inner_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4443640901073658,
+            0.5841142467616709,
+            0.42463307711707404
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.4443640901073658,
+            0.6941142467616709,
+            0.42463307711707404
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4443640901073658,
+            0.804114246761671,
+            0.42463307711707404
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.42463307711707404
+          ]
+        ]
+      ],
+      "step": 0,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "b": "object0",
+      "x": "object1",
+      "r": "object0",
+      "program_point": "inner_exit",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.445464867860234,
+            0.6941119920207983,
+            0.42489224457979335
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.447091793945255,
+            0.5840167070967134,
+            0.4248922445797931
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4443640901073658,
+            0.804114246761671,
+            0.4248922445797842
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 496,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "b": "object0",
+      "x": null,
+      "r": null,
+      "program_point": "outer_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.445464867860234,
+            0.6941119920207983,
+            0.42489224457979335
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.447091793945255,
+            0.5840167070967134,
+            0.4248922445797931
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4443640901073658,
+            0.804114246761671,
+            0.4248922445797842
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 496,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "b": "object0",
+      "x": "object2",
+      "r": "object2",
+      "program_point": "inner_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.445464867860234,
+            0.6941119920207983,
+            0.42489224457979335
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.447091793945255,
+            0.5840167070967134,
+            0.4248922445797931
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4443640901073658,
+            0.804114246761671,
+            0.4248922445797842
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 496,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object1",
+        "object2",
+        "object0",
+        "object3"
+      ],
+      "b": "object0",
+      "x": "object2",
+      "r": "object0",
+      "program_point": "inner_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4450807941150328,
+            0.8040093580401165,
+            0.42489224457979274
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.4470935955259707,
+            0.5840136816562042,
+            0.4248922445797931
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4464051314400608,
+            0.6940464177389212,
+            0.4248922445797933
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 987,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "b": "object0",
+      "x": "object2",
+      "r": "object0",
+      "program_point": "inner_exit",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4450790429677258,
+            0.8040065189886086,
+            0.4248922445797934
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.445460152853429,
+            0.6940312045318591,
+            0.42489224457979335
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4469316993353072,
+            0.5842284276764788,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 1460,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "b": "object0",
+      "x": null,
+      "r": null,
+      "program_point": "outer_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4450790429677258,
+            0.8040065189886086,
+            0.4248922445797934
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.445460152853429,
+            0.6940312045318591,
+            0.42489224457979335
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4469316993353072,
+            0.5842284276764788,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 1460,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "b": "object0",
+      "x": "object3",
+      "r": "object3",
+      "program_point": "inner_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4450790429677258,
+            0.8040065189886086,
+            0.4248922445797934
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.445460152853429,
+            0.6940312045318591,
+            0.42489224457979335
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4469316993353072,
+            0.5842284276764788,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4443640901073658,
+            0.914114246761671,
+            0.4248922445797842
+          ]
+        ]
+      ],
+      "step": 1460,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object2",
+        "object1",
+        "object3",
+        "object0"
+      ],
+      "b": "object0",
+      "x": "object3",
+      "r": "object0",
+      "program_point": "inner_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4452961612049637,
+            0.914235949622603,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.4454600813010139,
+            0.6940348547348805,
+            0.42489224457979397
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4469323427416132,
+            0.5842319862321156,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.446162284583514,
+            0.8042426463124949,
+            0.4248922445797926
+          ]
+        ]
+      ],
+      "step": 1962,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object2",
+        "object3",
+        "object1",
+        "object0"
+      ],
+      "b": "object0",
+      "x": "object3",
+      "r": "object0",
+      "program_point": "inner_head",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.445296090727944,
+            0.9142392285011336,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.4454060693395145,
+            0.8041603564356461,
+            0.42489224457979236
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4469329476973432,
+            0.584235332125065,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4461727213329754,
+            0.694005949319756,
+            0.42489224457979213
+          ]
+        ]
+      ],
+      "step": 2434,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object3",
+        "object2",
+        "object1",
+        "object0"
+      ],
+      "b": "object0",
+      "x": "object3",
+      "r": "object0",
+      "program_point": "inner_exit",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4452960201890994,
+            0.9142425102522166,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.44540851278649,
+            0.8041581977083151,
+            0.424892244579793
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4453993867343093,
+            0.6941093033049518,
+            0.42489224457979285
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4467168666393135,
+            0.5842590079259639,
+            0.4248922445797932
+          ]
+        ]
+      ],
+      "step": 2906,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    },
+    {
+      "objects": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "keys": [
+        [
+          "object0",
+          4
+        ],
+        [
+          "object1",
+          3
+        ],
+        [
+          "object2",
+          2
+        ],
+        [
+          "object3",
+          1
+        ]
+      ],
+      "order": [
+        "object3",
+        "object2",
+        "object1",
+        "object0"
+      ],
+      "b": "object0",
+      "x": null,
+      "r": null,
+      "program_point": "outer_exit",
+      "case_name": "reverse_demo",
+      "positions": [
+        [
+          "object0",
+          [
+            1.4452960201890994,
+            0.9142425102522166,
+            0.42489224457979313
+          ]
+        ],
+        [
+          "object1",
+          [
+            1.44540851278649,
+            0.8041581977083151,
+            0.424892244579793
+          ]
+        ],
+        [
+          "object2",
+          [
+            1.4453993867343093,
+            0.6941093033049518,
+            0.42489224457979285
+          ]
+        ],
+        [
+          "object3",
+          [
+            1.4467168666393135,
+            0.5842590079259639,
+            0.4248922445797932
+          ]
+        ]
+      ],
+      "step": 2906,
+      "held": null,
+      "buffered": [],
+      "initial_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ]
+    }
+  ]
+}

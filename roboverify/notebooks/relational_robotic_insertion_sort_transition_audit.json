@@ -1,0 +1,1003 @@
+{
+  "kind": "empirical measured-snapshot transition audit",
+  "scope": "Independently checks stored finite simulation snapshots and recorded transfer events. This is not a full source-model correctness proof, continuous-time safety proof, or guarantee of unseen physical behavior.",
+  "generated_utc": "2026-09-11T23:42:37.347190+00:00",
+  "corpus_file": "relational_robotic_insertion_sort_traces.json",
+  "corpus_sha256": "092592a7c627399ec659b1cc2efb3bbe85626f5492c060d7d0d64785e11b0522",
+  "source_hashes_match": {
+    "relational_robotic_sort.py": true,
+    "relational_sort_controller.py": true
+  },
+  "passed": true,
+  "counts": {
+    "outer_head": 99,
+    "snapshots": 325,
+    "outer_to_inner_transitions": 99,
+    "inner_exit": 99,
+    "inner_to_outer_transitions": 99,
+    "outer_exit": 33,
+    "cases": 33,
+    "physical_transfers": 282,
+    "simulation_steps": 45857,
+    "zero_swap_insertions": 37,
+    "one_swap_insertions": 37,
+    "multiple_swap_insertions": 25,
+    "zero_swap_cases": 2,
+    "distinct_key_cases": 24,
+    "duplicate_key_cases": 9,
+    "all_equal_key_cases": 1,
+    "split_train": 18,
+    "inner_head": 94,
+    "adjacent_swap_transitions": 94,
+    "split_held_out": 15
+  },
+  "checks": [
+    "All snapshots conserve physical identities and attached keys; measured Y-order and per-slot tolerances agree with stored row.",
+    "Outer true guard selects exactly the measured immediate successor; inner initialization preserves b and sets r=x with no physical motion.",
+    "Each true inner guard has a strictly larger immediate predecessor; next row is exactly the adjacent exchange, with x and b fixed and r=old b.",
+    "Each adjacent exchange has exactly three contiguous recorded transfers: x to buffer, predecessor to old x slot, x to old predecessor slot.",
+    "Each false inner guard has no larger predecessor; next outer snapshot has unchanged measured poses and b=previous r.",
+    "Each false outer guard is final with b at the last row object; final identities exactly match stable sorting of initial identities by keys.",
+    "Per-case swap counts equal initial strict inversions; equal-key identities are never exchanged."
+  ],
+  "failures": [],
+  "cases": [
+    {
+      "name": "permutation_00",
+      "split": "train",
+      "swaps": 0,
+      "initial_key_sequence": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object2",
+        "object1",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object2",
+        "object1",
+        "object0"
+      ],
+      "insertion_swaps": [
+        0,
+        0,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_01",
+      "split": "held_out",
+      "swaps": 1,
+      "initial_key_sequence": [
+        1,
+        2,
+        4,
+        3
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object0",
+        "object1",
+        "object3",
+        "object2"
+      ],
+      "insertion_swaps": [
+        0,
+        0,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_02",
+      "split": "train",
+      "swaps": 1,
+      "initial_key_sequence": [
+        1,
+        3,
+        2,
+        4
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object2",
+        "object1",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "insertion_swaps": [
+        0,
+        1,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_03",
+      "split": "held_out",
+      "swaps": 2,
+      "initial_key_sequence": [
+        1,
+        3,
+        4,
+        2
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object0",
+        "object2",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object1",
+        "object0",
+        "object2"
+      ],
+      "insertion_swaps": [
+        0,
+        0,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_04",
+      "split": "train",
+      "swaps": 2,
+      "initial_key_sequence": [
+        1,
+        4,
+        2,
+        3
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object3",
+        "object1",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "insertion_swaps": [
+        0,
+        1,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_05",
+      "split": "held_out",
+      "swaps": 3,
+      "initial_key_sequence": [
+        1,
+        4,
+        3,
+        2
+      ],
+      "initial_identity_order": [
+        "object1",
+        "object2",
+        "object3",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object0",
+        "object3",
+        "object2"
+      ],
+      "insertion_swaps": [
+        0,
+        1,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_06",
+      "split": "train",
+      "swaps": 1,
+      "initial_key_sequence": [
+        2,
+        1,
+        3,
+        4
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object3",
+        "object2"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object0",
+        "object3",
+        "object2"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_07",
+      "split": "held_out",
+      "swaps": 2,
+      "initial_key_sequence": [
+        2,
+        1,
+        4,
+        3
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object1",
+        "object3",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object2",
+        "object0",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_08",
+      "split": "train",
+      "swaps": 2,
+      "initial_key_sequence": [
+        2,
+        3,
+        1,
+        4
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object3",
+        "object2",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object0",
+        "object3",
+        "object1"
+      ],
+      "insertion_swaps": [
+        0,
+        2,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_09",
+      "split": "held_out",
+      "swaps": 3,
+      "initial_key_sequence": [
+        2,
+        3,
+        4,
+        1
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object2",
+        "object0",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object3",
+        "object2",
+        "object0"
+      ],
+      "insertion_swaps": [
+        0,
+        0,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_10",
+      "split": "train",
+      "swaps": 3,
+      "initial_key_sequence": [
+        2,
+        4,
+        1,
+        3
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object0",
+        "object3",
+        "object1"
+      ],
+      "insertion_swaps": [
+        0,
+        2,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_11",
+      "split": "held_out",
+      "swaps": 4,
+      "initial_key_sequence": [
+        2,
+        4,
+        3,
+        1
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object3",
+        "object2",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "insertion_swaps": [
+        0,
+        1,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_12",
+      "split": "train",
+      "swaps": 2,
+      "initial_key_sequence": [
+        3,
+        1,
+        2,
+        4
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        1,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_13",
+      "split": "held_out",
+      "swaps": 3,
+      "initial_key_sequence": [
+        3,
+        1,
+        4,
+        2
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object1",
+        "object2",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object0",
+        "object3",
+        "object2"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_14",
+      "split": "train",
+      "swaps": 3,
+      "initial_key_sequence": [
+        3,
+        2,
+        1,
+        4
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        2,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_15",
+      "split": "held_out",
+      "swaps": 4,
+      "initial_key_sequence": [
+        3,
+        2,
+        4,
+        1
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object1",
+        "object0",
+        "object2"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_16",
+      "split": "train",
+      "swaps": 4,
+      "initial_key_sequence": [
+        3,
+        4,
+        1,
+        2
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object3",
+        "object2"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object2",
+        "object0",
+        "object1"
+      ],
+      "insertion_swaps": [
+        0,
+        2,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_17",
+      "split": "held_out",
+      "swaps": 5,
+      "initial_key_sequence": [
+        3,
+        4,
+        2,
+        1
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object2",
+        "object0",
+        "object1"
+      ],
+      "insertion_swaps": [
+        0,
+        2,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_18",
+      "split": "train",
+      "swaps": 3,
+      "initial_key_sequence": [
+        4,
+        1,
+        2,
+        3
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object1",
+        "object3",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object3",
+        "object0",
+        "object2"
+      ],
+      "insertion_swaps": [
+        1,
+        1,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_19",
+      "split": "held_out",
+      "swaps": 4,
+      "initial_key_sequence": [
+        4,
+        1,
+        3,
+        2
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object1",
+        "object2",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        1,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_20",
+      "split": "train",
+      "swaps": 4,
+      "initial_key_sequence": [
+        4,
+        2,
+        1,
+        3
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object1",
+        "object2",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        2,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_21",
+      "split": "held_out",
+      "swaps": 5,
+      "initial_key_sequence": [
+        4,
+        2,
+        3,
+        1
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object3",
+        "object0",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object3",
+        "object0",
+        "object2"
+      ],
+      "insertion_swaps": [
+        1,
+        1,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_22",
+      "split": "train",
+      "swaps": 5,
+      "initial_key_sequence": [
+        4,
+        3,
+        1,
+        2
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object3",
+        "object1",
+        "object0"
+      ],
+      "insertion_swaps": [
+        1,
+        2,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "permutation_23",
+      "split": "held_out",
+      "swaps": 6,
+      "initial_key_sequence": [
+        4,
+        3,
+        2,
+        1
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object1",
+        "object0",
+        "object2"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object0",
+        "object1",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        2,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "train_ties_0",
+      "split": "train",
+      "swaps": 3,
+      "initial_key_sequence": [
+        2,
+        1,
+        2,
+        1
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object2",
+        "object3",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "train_ties_1",
+      "split": "train",
+      "swaps": 0,
+      "initial_key_sequence": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object2",
+        "object1",
+        "object0",
+        "object3"
+      ],
+      "insertion_swaps": [
+        0,
+        0,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "train_ties_2",
+      "split": "train",
+      "swaps": 2,
+      "initial_key_sequence": [
+        1,
+        3,
+        2,
+        2
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object0",
+        "object1",
+        "object2"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object1",
+        "object2",
+        "object0"
+      ],
+      "insertion_swaps": [
+        0,
+        1,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "train_ties_3",
+      "split": "train",
+      "swaps": 5,
+      "initial_key_sequence": [
+        3,
+        2,
+        2,
+        1
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object1",
+        "object3",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object0",
+        "object1",
+        "object3",
+        "object2"
+      ],
+      "insertion_swaps": [
+        1,
+        1,
+        3
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "train_ties_4",
+      "split": "train",
+      "swaps": 3,
+      "initial_key_sequence": [
+        0,
+        -1,
+        2,
+        -1
+      ],
+      "initial_identity_order": [
+        "object2",
+        "object3",
+        "object1",
+        "object0"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object0",
+        "object2",
+        "object1"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        2
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "train_ties_5",
+      "split": "train",
+      "swaps": 1,
+      "initial_key_sequence": [
+        1,
+        0,
+        1,
+        1
+      ],
+      "initial_identity_order": [
+        "object1",
+        "object0",
+        "object2",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object0",
+        "object1",
+        "object2",
+        "object3"
+      ],
+      "insertion_swaps": [
+        1,
+        0,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "held_out_ties_0",
+      "split": "held_out",
+      "swaps": 2,
+      "initial_key_sequence": [
+        -2,
+        4,
+        -2,
+        1
+      ],
+      "initial_identity_order": [
+        "object3",
+        "object0",
+        "object1",
+        "object2"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object1",
+        "object2",
+        "object0"
+      ],
+      "insertion_swaps": [
+        0,
+        1,
+        1
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "held_out_ties_1",
+      "split": "held_out",
+      "swaps": 2,
+      "initial_key_sequence": [
+        2,
+        1,
+        1,
+        2
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object3",
+        "object2",
+        "object1"
+      ],
+      "final_identity_order": [
+        "object3",
+        "object2",
+        "object0",
+        "object1"
+      ],
+      "insertion_swaps": [
+        1,
+        1,
+        0
+      ],
+      "stable_identity_order_checked": true
+    },
+    {
+      "name": "held_out_ties_2",
+      "split": "held_out",
+      "swaps": 4,
+      "initial_key_sequence": [
+        3,
+        3,
+        1,
+        2
+      ],
+      "initial_identity_order": [
+        "object0",
+        "object2",
+        "object1",
+        "object3"
+      ],
+      "final_identity_order": [
+        "object1",
+        "object3",
+        "object0",
+        "object2"
+      ],
+      "insertion_swaps": [
+        0,
+        2,
+        2
+      ],
+      "stable_identity_order_checked": true
+    }
+  ]
+}
