@@ -19,3 +19,7 @@ roboverify/notebooks/insertion_sort_invariant_practice_files/libs/quarto-html/qu
 roboverify/notebooks/insertion_sort_invariant_practice_files/libs/quarto-html/tippy.css
 roboverify/notebooks/insertion_sort_invariant_practice_files/libs/quarto-html/tippy.umd.min.js
 roboverify/notebooks/insertion_sort_invariant_practice_files/libs/quarto-html/tabsets/tabsets.js
+.DS_Store
+Claude outputs/hoare-triple-note.md
+roboverify/synthesis/examples/robotic_insertion_sort.py
+roboverify/notebooks/robotic_insertion_sort.html

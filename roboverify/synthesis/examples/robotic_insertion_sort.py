@@ -34,7 +34,6 @@ class SortObserver(Protocol):
         selected: str | None, order: tuple[str | None, ...],
     ) -> None: ...
 
-
 def insertion_sort_blocks(
     order: list[str | None],
     keys: Mapping[str, int],

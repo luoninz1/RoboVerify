@@ -8545,7 +8545,7 @@ Captured 13 coherent loop-boundary snapshots.
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">html</span><span class="w"> </span><span class="kn">import</span> <span class="n">escape</span>
@@ -8707,6 +8707,37 @@ Captured 13 coherent loop-boundary snapshots.
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="6.-Collect-independent-physical-training-and-held-out-runs">6. Collect independent physical training and held-out runs<a class="anchor-link" href="#6.-Collect-independent-physical-training-and-held-out-runs">¶</a></h2><p>The base corpus covers all 24 permutations of four distinct keys plus eight tie/negative-key cases. Splits are assigned by whole execution, before inference. A solver-derived refinement case is added to training; held-out runs remain unchanged. Every run uses the actual controller, with full simulator reset between cases.</p>
 <p>This cell runs the full physical corpus again. It writes incremental JSON evidence, including any failed cases; failed executions are reported rather than silently omitted from the success claim.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Meaning</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>permutation_XX</code></td>
+<td>One of the (4! = 24) arrangements of distinct keys <code>1, 2, 3, 4</code>. <code>XX</code> is its zero-based index.</td>
+<td><code>permutation_03</code>: <code>(1, 3, 4, 2)</code></td>
+</tr>
+<tr>
+<td><code>train_ties_X</code></td>
+<td>A <strong>training</strong> case containing equal keys. “Ties” means different blocks share the same sorting key.</td>
+<td><code>(2, 1, 2, 1)</code></td>
+</tr>
+<tr>
+<td><code>held_out_ties_X</code></td>
+<td>An equal-key case reserved for checking the inferred formulas, without supplying its snapshots to the learner.</td>
+<td><code>(2, 1, 1, 2)</code></td>
+</tr>
+<tr>
+<td><code>refinement_01_equal_suffix</code></td>
+<td>An additional training case introduced after symbolic verification found a weakness in the first inferred invariant.</td>
+<td><code>(1, 0, 1, 1)</code></td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 </div>
@@ -9343,6 +9374,58 @@ shifted_comparison: Shifted(ux1), Shifted(selected), KeyLE(ux1, selected), KeyLE
 </div>
 </div>
 </div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=969b7364">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p><strong>How to read the projection table</strong></p>
+<p>A <strong>vocabulary projection</strong> is a small selected set of predicates/atoms through which we view the same loop-state dataset. These are task-specific groups chosen in <code>infer_loop</code>, not three built-in categories of invariants in RoboVerify. Each group runs inference independently, using only the atoms and applicable domain axioms in that projection. The groups may overlap. Their names indicate their intended focus, not a restriction on which facts the learner may discover.</p>
+<table>
+<thead>
+<tr>
+<th>Projection</th>
+<th>Predicates</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ordering</code></td>
+<td>Outer: <code>Processed</code>, <code>Before</code>, <code>KeyLE</code>, <code>InRow</code>; inner: replace <code>Processed</code> with <code>Active</code></td>
+<td>Compare keys of blocks in the relevant ordered region. <code>InRow</code> is included because <code>Before</code> is defined only for row occupants, and its totality axiom is guarded by row membership.</td>
+</tr>
+<tr>
+<td><code>physical</code></td>
+<td><code>InRow</code>, <code>InBuffer</code>, <code>AtAssignedSlot</code></td>
+<td>Learn occupancy and agreement between measured positions and logical assignments. The inner projection also uses the <code>selected</code> constant to distinguish the buffered block from every other block.</td>
+</tr>
+<tr>
+<td><code>shifted_comparison</code></td>
+<td><code>Shifted</code>, <code>KeyLE</code>, with <code>selected</code></td>
+<td>Inner loop only: learn how the keys of already shifted blocks compare with the buffered block's key. The checked consequence is <code>Shifted(x) ⇒ ¬KeyLE(x, selected)</code>, meaning strictly greater.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why <code>ForAll(ux1, InRow(ux1))</code> appears twice.</strong> <code>InRow</code> belongs to both outer projections. Every captured outer-loop state has every block back in the row, so both independent inference calls can learn the same universally true fact. The ordering learner is allowed to discover this unary fact even though its main purpose is learning order relationships. Redundancy filtering takes place inside each inference call; the adapter does not perform a second global deduplication across projections. It combines the results as</p>
+<p>$$I_{outer}=I_{ordering}\land I_{physical},\qquad
+I_{inner}=I_{ordering}\land I_{physical}\land I_{shifted\_comparison}.$$</p>
+<p>The repetition is logically harmless because $P\land P\equiv P$. The table reports retained clauses <strong>per projection</strong>, so adding those counts does not give a count of globally unique or logically independent clauses. The repeated formula is retained in the display to preserve each inference call's provenance. At inner-loop heads, the selected block is in the buffer, so <code>ForAll(x, InRow(x))</code> is not a valid inner-loop invariant.</p>
+<p><strong>Why the atom counts are 9, 3, 7, and 5.</strong> A predicate name such as <code>Before</code> generates multiple atoms when applied to symbolic terms. Equality is also added automatically because <code>include_equality=True</code>.</p>
+<ul>
+<li><code>ordering</code>: two unary predicates applied to <code>ux1</code> and <code>ux2</code> give 4 atoms; two binary predicates in both argument orders give 4; <code>ux1 == ux2</code> adds 1: <strong>9</strong>.</li>
+<li>Outer <code>physical</code>: three unary predicates applied to <code>ux1</code>, with no selected constant: <strong>3</strong>.</li>
+<li>Inner <code>physical</code>: three unary predicates applied to both <code>ux1</code> and <code>selected</code> give 6; <code>ux1 == selected</code> adds 1: <strong>7</strong>.</li>
+<li><code>shifted_comparison</code>: <code>Shifted(ux1)</code>, <code>Shifted(selected)</code>, <code>KeyLE(ux1, selected)</code>, <code>KeyLE(selected, ux1)</code>, and <code>ux1 == selected</code>: <strong>5</strong>.</li>
+</ul>
+<p>These counts follow the current builder, which omits binary applications with syntactically identical arguments. Grounded variables can still refer to the same physical block.</p>
+<p><strong>Distinct truth rows are Boolean patterns, not executions.</strong> After evaluating the chosen atoms for all sampled object assignments, identical Boolean vectors are deduplicated. Outer <code>physical</code> has one pattern, <code>(True, False, True)</code>, for <code>InRow</code>, <code>InBuffer</code>, and <code>AtAssignedSlot</code>. Inner <code>physical</code> has two patterns: the assigned object is either the buffered selected block or another block occupying its assigned row slot. The ordering projections distinguish more patterns of region membership, relative position, key comparisons, and identity.</p>
+<p>Implementation: <a href="../synthesis/examples/robotic_sort_inference.py"><code>infer_loop</code></a> selects the overlapping projections and conjoins their results; <a href="../synthesis/inference_lib/relational.py"><code>build_relational_vocabulary</code> and <code>build_relational_dataset</code></a> construct atoms and deduplicate truth rows.</p>
+</div>
+</div>
+</div>
+</div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=6e04aa78">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
@@ -9366,7 +9449,11 @@ shifted_comparison: Shifted(ux1), Shifted(selected), KeyLE(ux1, selected), KeyLE
     <span class="k">for</span> <span class="n">projection</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">loop</span><span class="o">.</span><span class="n">projections</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="n">projection</span><span class="si">}</span><span class="s2">]"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">clause</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">clauses</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">. </span><span class="si">{</span><span class="n">clause</span><span class="o">.</span><span class="n">expr</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Clause </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"expression:"</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">clause</span><span class="o">.</span><span class="n">expr</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"target predicate:"</span><span class="p">,</span> <span class="n">clause</span><span class="o">.</span><span class="n">target_predicate</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"learned via:"</span><span class="p">,</span> <span class="n">clause</span><span class="o">.</span><span class="n">learned_via</span><span class="p">)</span>
     <span class="n">solver</span> <span class="o">=</span> <span class="n">z3</span><span class="o">.</span><span class="n">Solver</span><span class="p">()</span>
     <span class="n">loop</span><span class="o">.</span><span class="n">domain</span><span class="o">.</span><span class="n">add_axioms</span><span class="p">(</span><span class="n">solver</span><span class="p">)</span>
     <span class="n">solver</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">invariant</span><span class="p">)</span>
@@ -9392,20 +9479,50 @@ shifted_comparison: Shifted(ux1), Shifted(selected), KeyLE(ux1, selected), KeyLE
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>[ordering]
-1. ForAll([ux1, ux2],
+
+Clause 1
+expression:
+ForAll([ux1, ux2],
        Or(Not(Processed(ux2)),
           Before(ux2, ux1),
           Processed(ux1)))
-2. ForAll([ux1, ux2],
+target predicate: Processed(ux1)
+learned via: phi
+
+Clause 2
+expression:
+ForAll([ux1, ux2],
        Or(Not(Processed(ux1)),
           Before(ux1, ux2),
           KeyLE(ux2, ux1)))
-3. ForAll([ux1, ux2],
+target predicate: Processed(ux1)
+learned via: phi_prime
+
+Clause 3
+expression:
+ForAll([ux1, ux2],
        Or(Before(ux1, ux2), Before(ux2, ux1), ux1 == ux2))
-4. ForAll(ux1, InRow(ux1))
+target predicate: Before(ux1, ux2)
+learned via: phi
+
+Clause 4
+expression:
+ForAll(ux1, InRow(ux1))
+target predicate: InRow(ux1)
+learned via: phi
 [physical]
-1. ForAll(ux1, InRow(ux1))
-2. ForAll(ux1, AtAssignedSlot(ux1))
+
+Clause 1
+expression:
+ForAll(ux1, InRow(ux1))
+target predicate: InRow(ux1)
+learned via: phi
+
+Clause 2
+expression:
+ForAll(ux1, AtAssignedSlot(ux1))
+target predicate: AtAssignedSlot(ux1)
+learned via: phi
 </pre>
 </div>
 </div>
@@ -9419,28 +9536,73 @@ shifted_comparison: Shifted(ux1), Shifted(selected), KeyLE(ux1, selected), KeyLE
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>[ordering]
-1. ForAll([ux1, ux2],
+
+Clause 1
+expression:
+ForAll([ux1, ux2],
        Or(Active(ux1),
           Not(Active(ux2)),
           Not(Before(ux1, ux2))))
-2. ForAll(ux1, Or(Not(Active(ux1)), InRow(ux1)))
-3. ForAll([ux1, ux2],
+target predicate: Active(ux1)
+learned via: phi
+
+Clause 2
+expression:
+ForAll(ux1, Or(Not(Active(ux1)), InRow(ux1)))
+target predicate: Active(ux1)
+learned via: phi_prime
+
+Clause 3
+expression:
+ForAll([ux1, ux2],
        Or(Not(Active(ux1)),
           KeyLE(ux2, ux1),
           Not(Before(ux2, ux1))))
-4. ForAll([ux1, ux2],
+target predicate: Active(ux1)
+learned via: phi_prime
+
+Clause 4
+expression:
+ForAll([ux1, ux2],
        Or(Before(ux1, ux2),
           InRow(ux1),
           InRow(ux2),
           ux1 == ux2))
+target predicate: Before(ux1, ux2)
+learned via: phi
 [physical]
-1. ForAll(ux1, Or(InRow(ux1), ux1 == selected))
-2. Not(InRow(selected))
-3. InBuffer(selected)
-4. ForAll(ux1, Or(AtAssignedSlot(ux1), ux1 == selected))
+
+Clause 1
+expression:
+ForAll(ux1, Or(InRow(ux1), ux1 == selected))
+target predicate: InRow(ux1)
+learned via: phi
+
+Clause 2
+expression:
+Not(InRow(selected))
+target predicate: InRow(ux1)
+learned via: phi_prime
+
+Clause 3
+expression:
+InBuffer(selected)
+target predicate: InBuffer(ux1)
+learned via: phi
+
+Clause 4
+expression:
+ForAll(ux1, Or(AtAssignedSlot(ux1), ux1 == selected))
+target predicate: AtAssignedSlot(ux1)
+learned via: phi
 [shifted_comparison]
-1. ForAll(ux1,
+
+Clause 1
+expression:
+ForAll(ux1,
        Or(Not(Shifted(ux1)), Not(KeyLE(ux1, selected))))
+target predicate: Shifted(ux1)
+learned via: phi_prime
 </pre>
 </div>
 </div>
