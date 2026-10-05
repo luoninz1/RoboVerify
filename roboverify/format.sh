@@ -1,2 +1,2 @@
-uvx isort --profile black synthesis/api/*.py synthesis/entry/*.py synthesis/inference_lib/*.py synthesis/mcmc/*.py synthesis/topdown/*.py synthesis/util/*.py synthesis/verification_lib/*.py
-uvx black synthesis/api/*.py synthesis/entry/*.py synthesis/inference_lib/*.py synthesis/mcmc/*.py synthesis/topdown/*.py synthesis/util/*.py synthesis/verification_lib/*.py
+uvx isort --profile black synthesis/api/*.py synthesis/cfg/*.py synthesis/entry/*.py synthesis/experiment/*.py synthesis/experiment/mcmc/*.py synthesis/inference_lib/*.py synthesis/mcmc/*.py synthesis/predicates/*.py synthesis/topdown/*.py synthesis/util/*.py synthesis/verification_lib/*.py
+uvx black synthesis/api/*.py synthesis/cfg/*.py synthesis/entry/*.py synthesis/experiment/*.py synthesis/experiment/mcmc/*.py synthesis/inference_lib/*.py synthesis/mcmc/*.py synthesis/predicates/*.py synthesis/topdown/*.py synthesis/util/*.py synthesis/verification_lib/*.py

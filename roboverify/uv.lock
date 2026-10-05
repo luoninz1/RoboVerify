@@ -2348,6 +2348,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyeda"
+version = "0.29.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/1f/ec1e7860b0931c61b7a31ea70a89efe669cfa74539768fb6fa5fbf9cc53f/pyeda-0.29.0.tar.gz", hash = "sha256:efd4d3e548079ca059f44f9babb9bd67b332ec1762897324fcceb8da1d0f5fed", size = 486837, upload-time = "2023-11-19T17:38:55.323Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/7c/db0108f4c0e6e0fc65f3f4f28412dbc8b0d91ebefb615cc7917139279922/pyeda-0.29.0-cp312-cp312-win_amd64.whl", hash = "sha256:028bd63ab29bf92ce48d576ee2b8256c287e8d54d5e644d48af360ef2bbb0712", size = 186124, upload-time = "2023-11-19T17:38:52.932Z" },
+]
+
+[[package]]
 name = "pygame"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2661,6 +2670,7 @@ dependencies = [
     { name = "opencv-python" },
     { name = "perlin-noise" },
     { name = "pip" },
+    { name = "pyeda" },
     { name = "pygame" },
     { name = "scikit-learn" },
     { name = "scipy" },
@@ -2692,6 +2702,7 @@ requires-dist = [
     { name = "opencv-python", specifier = "==4.10.0.82" },
     { name = "perlin-noise", specifier = "==1.14" },
     { name = "pip", specifier = "==21" },
+    { name = "pyeda", specifier = "==0.29.0" },
     { name = "pygame", specifier = "==2.6.1" },
     { name = "scikit-learn", specifier = "==1.7.2" },
     { name = "scipy", specifier = "==1.15.3" },

@@ -17,6 +17,7 @@ dependencies = [
     "opencv-python==4.10.0.82",
     "perlin-noise==1.14",
     "pip==21",
+    "pyeda==0.29.0",
     "pygame==2.6.1",
     "scikit-learn==1.7.2",
     "scipy==1.15.3",

@@ -18,7 +18,7 @@ from synthesis.examples.insertion_sort import (
     to_relational_snapshot,
     trace_insertion_sort,
 )
-from synthesis.inference_lib.inference import run_proposal_example
+from synthesis.inference_lib.golden_tower_fixtures import run_proposal_example
 from synthesis.inference_lib.relational import (
     RelationalSnapshot,
     RelationSpec,

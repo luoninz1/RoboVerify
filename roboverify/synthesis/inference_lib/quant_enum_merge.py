@@ -1,9 +1,10 @@
 import itertools
-import pdb
 import re
 from typing import Any, Callable, Dict, List, Set, Tuple
 
 import z3
+
+from synthesis.util.symbols import fresh_const, open_quantifier, rewrite_quantifier
 
 
 def z3_to_python_expr(expr: z3.ExprRef) -> Any:
@@ -133,8 +134,6 @@ def eval_quantified_expr(
             eval_quantified_expr(a, env, domain, function_impls, bound_vars)
             for a in expr["args"]
         ]
-        if expr["name"] == "Top":
-            return function_impls[expr["name"]](*args, domain)
         return function_impls[expr["name"]](*args)
 
     # ---------- Boolean ----------
@@ -435,16 +434,20 @@ VAR_RE = re.compile(r"Var\((\d+)\)")
 
 
 # Helper: fresh variable generators
-def fresh_univ(n, BoxSort, start):
-    names = [f"ux{i}" for i in range(start + 1, start + n + 1)]
-    vars_ = z3.Consts(" ".join(names), BoxSort)
-    return list(vars_), start + n
+def fresh_univ(n, BoxSort, start, avoid=()):
+    vars_ = [
+        fresh_const(BoxSort, f"ux{i}", avoid=avoid)
+        for i in range(start + 1, start + n + 1)
+    ]
+    return vars_, start + n
 
 
-def fresh_exist(n, BoxSort, start):
-    names = [f"ex{i}" for i in range(start + 1, start + n + 1)]
-    vars_ = z3.Consts(" ".join(names), BoxSort)
-    return list(vars_), start + n
+def fresh_exist(n, BoxSort, start, avoid=()):
+    vars_ = [
+        fresh_const(BoxSort, f"ex{i}", avoid=avoid)
+        for i in range(start + 1, start + n + 1)
+    ]
+    return vars_, start + n
 
 
 # Main function
@@ -586,9 +589,13 @@ def python_expr_to_z3(
 
         # generate fresh bound variables
         if op == "ForAll":
-            bound_vars, ux_counter = fresh_univ(n, BoxSort, ux_counter)
+            bound_vars, ux_counter = fresh_univ(
+                n, BoxSort, ux_counter, var_map.values()
+            )
         else:
-            bound_vars, ex_counter = fresh_exist(n, BoxSort, ex_counter)
+            bound_vars, ex_counter = fresh_exist(
+                n, BoxSort, ex_counter, var_map.values()
+            )
 
         # build body recursively
         body_z3, ux_counter, ex_counter = python_expr_to_z3(
@@ -700,58 +707,26 @@ def rebuild_exists_forall_right(
     Args:
         expr: Z3 expression (Exists or ForAll->Exists)
         promote_index: index of existential to promote
-        ux_prefix: universal prefix
-        ex_prefix: existential prefix
-        outer_ux_offset: counter for existing outer universals
+        ux_prefix, ex_prefix, outer_ux_offset: retained for caller compatibility;
+            binder identities now come from the shared fresh-symbol allocator.
     """
-    # Case: outer ForAll
     if z3.is_quantifier(expr) and expr.is_forall():
-        num_x = expr.num_vars()
-        x_sorts = [expr.var_sort(i) for i in range(num_x)]
-        # Recurse into body, shift offset for outer universals
-        inner = rebuild_exists_forall_right(
-            expr.body(),
-            promote_index,
-            ux_prefix,
-            ex_prefix,
-            outer_ux_offset=outer_ux_offset + num_x,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rebuild_exists_forall_right(
+                body,
+                promote_index,
+                ux_prefix,
+                ex_prefix,
+                outer_ux_offset=outer_ux_offset + expr.num_vars(),
+            ),
         )
-        xs_consts = [
-            z3.Const(f"{ux_prefix}{i+1+outer_ux_offset}", s)
-            for i, s in enumerate(x_sorts)
-        ]
-        return z3.ForAll(xs_consts, inner)
 
-    # Must be Exists
-    assert z3.is_quantifier(expr) and expr.is_exists()
-    num_y = expr.num_vars()
-    phi = expr.body()
-
-    # Build constants for existentials
-    y_consts = [z3.Const(f"{ex_prefix}{i+1}", expr.var_sort(i)) for i in range(num_y)]
-
-    # Promoted variable: next available universal index
-    promoted_const = z3.Const(
-        f"{ux_prefix}{outer_ux_offset + 1}", expr.var_sort(promote_index)
-    )
-
-    # Build replacement list for substitute_vars
-    replace_list = []
-    for i in range(num_y):
-        if i == promote_index:
-            replace_list.append(promoted_const)
-        else:
-            replace_list.append(y_consts[i])
-
-    # Substitute variables by De Bruijn index (reverse order for substitute_vars)
-    new_phi = z3.substitute_vars(phi, *replace_list[::-1])
-
-    # Wrap promoted variable first (innermost ForAll)
-    new_phi = z3.ForAll([promoted_const], new_phi)
-
-    # Wrap remaining existentials outside
-    remaining = [y_consts[i] for i in range(num_y) if i != promote_index]
-    if remaining:
-        new_phi = z3.Exists(remaining, new_phi)
-
-    return new_phi
+    if not z3.is_quantifier(expr) or not expr.is_exists():
+        raise ValueError("Expected Exists or ForAll followed by Exists")
+    if not 0 <= promote_index < expr.num_vars():
+        raise ValueError("Existential promotion index out of range")
+    variables, body = open_quantifier(expr)
+    result = z3.ForAll([variables[promote_index]], body)
+    remaining = [v for i, v in enumerate(variables) if i != promote_index]
+    return z3.Exists(remaining, result) if remaining else result

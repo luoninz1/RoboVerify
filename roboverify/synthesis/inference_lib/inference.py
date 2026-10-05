@@ -1,19 +1,36 @@
 import contextlib
 import io
 import itertools
-import pdb
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import sympy
-import z3
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import z3
 from synthesis.inference_lib import quant_enum_merge
+from synthesis.inference_lib.minimization import espresso_form, get_invariant_minimizer
 from synthesis.util import on
+from synthesis.util.symbols import fresh_const
 
-z3.set_option("smt.core.minimize", "true")
+
+class InferenceDataError(Exception):
+    """Invariant inference was handed data it cannot interpret.
+
+    Raised where a predicate's arguments cannot be resolved to object names via
+    the variable and constant mappings -- a malformed dataset or a vocabulary
+    that does not match the states it is being evaluated against.
+    """
+
+
+class SeparationInfeasible(Exception):
+    """No formula in the vocabulary separates the S and U rows.
+
+    This is a *normal* outcome, not a defect: after a counterexample-guided
+    round adds a conflicting row, the current vocabulary may genuinely admit no
+    separating predicate. Callers are expected to catch it and widen the
+    vocabulary or drop the clause, which is why it must not halt the process.
+    """
 
 
 @dataclass(frozen=True)
@@ -114,11 +131,6 @@ def add_all_pairs(vocabulary, r, all_vars):
                 assert False, f"unknown relation r: {r}"
 
 
-def add_univariable_predicate(vocabulary, r, all_vars):
-    for v in all_vars:
-        vocabulary.append(r(v))
-
-
 def forall_exists_compute_omega(
     universally_quantified_vars: List,
     existential_quantified_vars: List,
@@ -128,10 +140,7 @@ def forall_exists_compute_omega(
     all_vars = universally_quantified_vars + existential_quantified_vars + constants
     omega_inv = []
     for r in relations:
-        if str(r) == "Top":
-            add_univariable_predicate(omega_inv, r, all_vars)
-        else:
-            add_all_pairs(omega_inv, r, all_vars)
+        add_all_pairs(omega_inv, r, all_vars)
     return omega_inv
 
 
@@ -340,21 +349,7 @@ def compute_data(
     data = []
     for predicate in omega_k:
         print("predicate:", predicate)
-        if str(predicate).startswith("Top"):
-            arg0 = predicate.arg(0)
-            block1_name = (
-                var_mapping[arg0] if arg0 in var_mapping else constants_mapping[arg0]
-            )
-            top_flag = True
-            for other_block_name in state:
-                if block1_name != other_block_name:
-                    if on.on_star_implementation(
-                        state[other_block_name], state[block1_name]
-                    ):
-                        top_flag = False
-                        break
-            data.append(top_flag)
-        elif str(predicate).startswith("ON_star") and not str(predicate).startswith(
+        if str(predicate).startswith("ON_star") and not str(predicate).startswith(
             "ON_star_zero"
         ):
             arg0, arg1 = predicate.arg(0), predicate.arg(1)
@@ -365,10 +360,10 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
-            # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -399,10 +394,10 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
-            # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             data.append(
                 on.higher_implementation(
                     state[block1_name],
@@ -418,10 +413,10 @@ def compute_data(
                 var_mapping[arg1] if arg1 in var_mapping else constants_mapping[arg1]
             )
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
-            # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             data.append(
                 on.scattered_implementation(
                     state[block1_name],
@@ -498,19 +493,7 @@ def compute_data_with_function(
     data = []
     for predicate in omega_k:
         print("predicate:", predicate)
-        if str(predicate).startswith("Top"):
-            arg0 = predicate.arg(0)
-            block1_name = _resolve_term_to_object_name(arg0)
-            top_flag = True
-            for other_block_name in state:
-                if block1_name != other_block_name:
-                    if on.on_star_implementation(
-                        state[other_block_name], state[block1_name]
-                    ):
-                        top_flag = False
-                        break
-            data.append(top_flag)
-        elif str(predicate).startswith("Mark"):
+        if str(predicate).startswith("Mark"):
             arg0 = predicate.arg(0)
             block1_name = _resolve_term_to_object_name(arg0)
             assert isinstance(block1_name, str)
@@ -544,10 +527,10 @@ def compute_data_with_function(
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
-            # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             data.append(
                 on.on_star_implementation(
                     state[block1_name],
@@ -570,10 +553,10 @@ def compute_data_with_function(
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
-            # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             data.append(
                 on.higher_implementation(
                     state[block1_name],
@@ -585,10 +568,10 @@ def compute_data_with_function(
             block1_name = _resolve_term_to_object_name(arg0)
             block2_name = _resolve_term_to_object_name(arg1)
             if not (isinstance(block1_name, str) and isinstance(block2_name, str)):
-                pdb.set_trace()
-            assert isinstance(block1_name, str) and isinstance(block2_name, str)
-            # if block1_name == "tbl" or block2_name == "tbl":
-            # pdb.set_trace()
+                raise InferenceDataError(
+                    f"cannot resolve both arguments of {predicate} to object names; "
+                    f"got {block1_name!r} and {block2_name!r}"
+                )
             data.append(
                 on.scattered_implementation(
                     state[block1_name],
@@ -637,7 +620,7 @@ def learn_from_partition(S: Set, U: Set):
             break
 
     # sel_i ∈ {0,1}
-    sel = [z3.Int(f"sel_{i}") for i in range(n)]
+    sel = [fresh_const(z3.IntSort(), f"sel_{i}") for i in range(n)]
 
     opt = z3.Optimize()
 
@@ -666,8 +649,10 @@ def learn_from_partition(S: Set, U: Set):
         print("model is", model)
         chosen = [i for i in range(n) if model[sel[i]].as_long() == 1]
         return chosen
-    else:
-        pdb.set_trace()
+    raise SeparationInfeasible(
+        f"no subset of the {n} candidate predicates separates the "
+        f"{len(S)} S-rows from the {len(U)} U-rows (optimizer returned {result})"
+    )
 
 
 def construct_truth_table_and_extract_expression_for_phi(
@@ -696,6 +681,8 @@ def construct_truth_table_and_extract_expression_for_phi(
         raise ValueError("Not all assignment from current_S are accepted")
 
     var_symbols = sympy.symbols(f"term0:{num_selected}")
+    if get_invariant_minimizer() == "pyeda":
+        return espresso_form(var_symbols, accepted_values), var_symbols
     return sympy.SOPform(var_symbols, accepted_values), var_symbols
 
 
@@ -725,7 +712,9 @@ def construct_truth_table_and_extract_expression_for_phi_prime(
         raise ValueError("Not all assignment from current_U are rejected")
 
     var_symbols = sympy.symbols(f"term0:{num_selected}")
-    if num_selected > _POSFORM_VAR_THRESHOLD:
+    if get_invariant_minimizer() == "pyeda":
+        pos_expr = espresso_form(var_symbols, rejected_values, complement=True)
+    elif num_selected > _POSFORM_VAR_THRESHOLD:
         pos_expr = _sympy_pos_unminimized_from_rejected(
             var_symbols, rejected_values, num_selected
         )
@@ -840,6 +829,9 @@ def implication_sop_to_clauses_z3(M, N):
 
 def add_universal_quantifiers(clauses: List, universal_quantified_vars: List) -> List:
     """Adding universal quantifiers for all vars in universal_quantified_vars"""
+    # Ground vocabularies have no binders; ForAll([]) is rejected by Z3.
+    if not universal_quantified_vars:
+        return list(clauses)
     result = []
     for clause in clauses:
         result.append(z3.ForAll([*universal_quantified_vars], clause))
@@ -882,15 +874,30 @@ def _add_inference_axioms(
         active_context.add_axiom_scattered(solver)
 
 
+TAUTOLOGY_CHECK_TIMEOUT_MS = 10_000
+
+
 def check_tautology(
     clause: z3.ExprRef,
     context: Optional[highlevel_verification_lib.HighLevelContext] = None,
+    timeout_ms: int = TAUTOLOGY_CHECK_TIMEOUT_MS,
+    *,
     axiom_adder: Optional[Callable[[z3.Solver], None]] = None,
 ) -> bool:
-    """Check whether clause can be directly derived from the axioms we already have
-    Returns True if the caluse is a tautology
+    """Is ``clause`` derivable from the domain axioms alone?
+
+    True means provably a tautology, so the caller drops the clause as carrying
+    no information. An inconclusive solver answer returns False -- both call
+    sites read that as "keep the clause", which is the conservative direction:
+    keeping a redundant clause costs a little solver time later, whereas
+    dropping one we failed to prove redundant would weaken the invariant.
+
+    The timeout makes that inconclusive case reachable at all. Without it a
+    hard quantified query can hang, which in a counterexample-guided loop means
+    the whole run wedges with no diagnosis.
     """
     solver = z3.Solver()
+    solver.set("timeout", timeout_ms)
 
     _add_inference_axioms(solver, context=context, axiom_adder=axiom_adder)
 
@@ -899,10 +906,13 @@ def check_tautology(
     if result == z3.unsat:
         # can be derived from axioms
         return True
-    elif result == z3.sat:
+    if result == z3.sat:
         return False
-    else:
-        assert False, f"unknown z3 result {result}"
+    print(
+        f"[WARN] tautology check was inconclusive ({result}) for {clause}; "
+        "keeping the clause"
+    )
+    return False
 
 
 def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
@@ -927,7 +937,7 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
 
     assert n is not None, "Could not infer tuple dimension"
 
-    sel = [z3.Int(f"sel_{i}") for i in range(n)]
+    sel = [fresh_const(z3.IntSort(), f"sel_{i}") for i in range(n)]
 
     opt = z3.Optimize()
 
@@ -976,7 +986,10 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
     ]
 
     if not valid_partitions:
-        pdb.set_trace()
+        raise SeparationInfeasible(
+            "no witness permutation yielded a usable partition constraint, so "
+            "there is nothing for the optimizer to separate"
+        )
 
     opt.add(z3.Or(*valid_partitions))
 
@@ -986,8 +999,10 @@ def forall_exists_learn_from_partition(all_S: List[Set], all_U: List[Set]):
     result = opt.check()
 
     if result != z3.sat:
-        pdb.set_trace()
-        # return None
+        raise SeparationInfeasible(
+            "no subset of the candidate predicates separates the forall-exists "
+            f"partitions (optimizer returned {result})"
+        )
 
     model = opt.model()
 
@@ -1419,10 +1434,6 @@ def forall_exists_loop_inference(
         universally_quantified_vars, existential_quantified_vars, relations, constants
     )
 
-    # (ux1,) = universally_quantified_vars
-    # (ex1,) = existential_quantified_vars
-    # b0, b = constants
-    # omega_inv = [ON_star(ex1, b0), Top(ex1)]
     print("omega_inv", omega_inv)
 
     all_datasets: List = forall_exists_compute_dataset(
@@ -1618,6 +1629,7 @@ def loop_inference(
     print("checking equivalent with ground truth")
     solver = z3.Solver()
     solver.set(unsat_core=True)
+    solver.set("smt.core.minimize", True)
 
     active_context.add_axiom(solver)
     active_context.add_axiom_on_star_zero(solver)
@@ -1627,7 +1639,7 @@ def loop_inference(
     x, y, z = z3.Consts("x y z", active_context.BoxSort)
 
     def on_table(x):
-        (fresh,) = z3.Consts("fresh", active_context.BoxSort)
+        fresh = fresh_const(active_context.BoxSort, "on_table", avoid=(x,))
         return z3.ForAll([fresh], active_context.Higher(fresh, x))
 
     # desired = z3.Not(
@@ -1640,8 +1652,6 @@ def loop_inference(
     # print("model is")
     # print(solver.model())
     # print("Unsat Core:", solver.unsat_core())
-    # import pdb
-    # pdb.set_trace()
     # highlevel_verification.add_unstack_b0_bottom_loop_invarinat(solver, b0)  # not
     # solver.assert_and_track(z3.Not(z3.ForAll([x], z3.Implies(ON_star(x, b0), x != b))), "not_b_neq_b0")
     # solver.assert_and_track(ON_star(x, b0), "on_b0")
@@ -1879,7 +1889,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1891,7 +1901,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1903,7 +1913,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -1915,7 +1925,7 @@ def run_2d_outer_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
     ]
     k = 2
@@ -2034,7 +2044,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2046,7 +2056,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2058,7 +2068,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2070,7 +2080,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2082,7 +2092,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2094,7 +2104,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2106,7 +2116,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2118,7 +2128,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2130,7 +2140,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2142,7 +2152,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2154,7 +2164,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
         {
             "x1": [0.0, 0.0, 0.0],
@@ -2166,7 +2176,7 @@ def run_2d_inner_loop_example(
             "x7": [0.0, 2.0, 0.0],
             "x8": [8.0, 2.0, 0.0],
             "x9": [9.0, 2.0, 0.0],
-            "null": [-100.0, -100.0, -100.0],
+            "null": on.NULL,
         },
     ]
     k = 2
@@ -2355,277 +2365,6 @@ def run_2d_inner_loop_example(
     )
 
 
-def run_proposal_example(
-    context: highlevel_verification_lib.HighLevelContext,
-) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
-    context = _ensure_context(context)
-    states_zero: List[Dict] = [{}, {}, {}, {}]
-    states: List[Dict] = [
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [5.0, 5.0, 0.0],
-            "x5": [10.0, 10.0, 0.0],
-        },
-        {"x1": [0.0, 0.0, 0.0], "x2": [5.0, 5.0, 0.0], "x3": [10.0, 10.0, 0.0]},
-    ]
-    k = 2
-    relations = [context.ON_star, context.Higher, context.Scattered, "equality"]
-    b0, b = context.get_consts("b0"), context.get_consts("b")
-    constants = [b0, b]
-    constants_mappings = [
-        {b0: "x1", b: "x3"},
-        {b0: "x1", b: "x1"},
-    ]
-
-    return loop_inference(
-        states_zero,
-        states,
-        k,
-        relations,
-        constants,
-        constants_mappings,
-        context=context,
-    )
-
-
-def run_unstack_example(
-    context: highlevel_verification_lib.HighLevelContext,
-) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
-    context = _ensure_context(context)
-    states_zero: List[Dict] = [{}, {}, {}, {}]
-    states: List[Dict] = [
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [10.0, 0.0, 0.0],
-            "x4": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [15.0, 0.0, 0.0],
-            "x3": [10.0, 0.0, 0.0],
-            "x4": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-    ]
-    n_forall = 2
-    relations = [context.ON_star, context.Higher, context.Scattered, "equality"]
-    b0 = context.get_consts("b0")
-    b = context.get_consts("b")
-    tbl = context.get_consts("tbl")
-    constants = [b0, b, tbl]
-    constants_mappings = [
-        {b0: "x1", b: "x1", tbl: "tbl"},
-        {b0: "x1", b: "x4", tbl: "tbl"},
-        {b0: "x1", b: "x3", tbl: "tbl"},
-        {b0: "x1", b: "x2", tbl: "tbl"},
-    ]
-
-    return loop_inference(
-        states_zero,
-        states,
-        n_forall,
-        relations,
-        constants,
-        constants_mappings,
-        context=context,
-    )
-
-
-def run_reverse_example(
-    context: highlevel_verification_lib.HighLevelContext,
-) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
-    context = _ensure_context(context)
-    states_zero: List[Dict] = [
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-    ]
-    states: List[Dict] = [
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [0.0, 0.0, 0.20],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [0.0, 0.0, 0.15],
-            "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [0.0, 0.0, 0.1],
-            "x4": [5.0, 0.0, 0.05],
-            "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.05],
-            "x3": [5.0, 0.0, 0.1],
-            "x4": [5.0, 0.0, 0.05],
-            "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [5.0, 0.0, 0.15],
-            "x3": [5.0, 0.0, 0.1],
-            "x4": [5.0, 0.0, 0.05],
-            "x5": [5.0, 0.0, 0.0],
-            "tbl": [-100.0, -100.0, -100.0],
-        },
-    ]
-    k = 2
-    relations = [context.ON_star, context.ON_star_zero, "equality"]
-    b0, b = context.get_consts("b0"), context.get_consts("b")
-    tbl = context.get_consts("tbl")
-    constants = [b0, b, tbl]
-    constants_mappings = [
-        {b0: "x1", b: "tbl", tbl: "tbl"},
-        {b0: "x1", b: "x5", tbl: "tbl"},
-        {b0: "x1", b: "x4", tbl: "tbl"},
-        {b0: "x1", b: "x3", tbl: "tbl"},
-        {b0: "x1", b: "x2", tbl: "tbl"},
-    ]
-
-    return loop_inference(
-        states_zero,
-        states,
-        k,
-        relations,
-        constants,
-        constants_mappings,
-        context=context,
-    )
-
-
-def run_partial_stack_example(
-    context: highlevel_verification_lib.HighLevelContext,
-) -> Tuple[z3.ExprRef, List[z3.ExprRef]]:
-    context = _ensure_context(context)
-    states_zero: List[Dict] = [{}, {}, {}, {}]
-    states: List[Dict] = [
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [5.0, 0.0, 0.0],
-            "x3": [5.0, 0.0, 0.05],
-            "x4": [10.0, 0.0, 0.0],
-            "x5": [10.0, 0.0, 0.05],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [5.0, 0.0, 0.0],
-            "x3": [0.0, 0.0, 0.05],
-            "x4": [10.0, 0.0, 0.0],
-            "x5": [10.0, 0.0, 0.05],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [5.0, 0.0, 0.0],
-            "x3": [0.0, 0.0, 0.05],
-            "x4": [10.0, 0.0, 0.0],
-            "x5": [0.0, 0.0, 0.1],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.15],
-            "x3": [0.0, 0.0, 0.05],
-            "x4": [10.0, 0.0, 0.0],
-            "x5": [0.0, 0.0, 0.1],
-        },
-        {
-            "x1": [0.0, 0.0, 0.0],
-            "x2": [0.0, 0.0, 0.15],
-            "x3": [0.0, 0.0, 0.05],
-            "x4": [0.0, 0.0, 0.20],
-            "x5": [0.0, 0.0, 0.1],
-        },
-    ]
-    k = 2
-    relations = [context.ON_star, "equality"]
-    b0, b = context.get_consts("b0"), context.get_consts("b")
-    constants = [b0, b]
-    constants_mappings = [
-        {b0: "x1", b: "x1"},
-        {b0: "x1", b: "x3"},
-        {b0: "x1", b: "x5"},
-        {b0: "x1", b: "x2"},
-        {b0: "x1", b: "x4"},
-    ]
-
-    return loop_inference(
-        states_zero,
-        states,
-        k,
-        relations,
-        constants,
-        constants_mappings,
-        context=context,
-    )
-
-
 def run_forall_exists_example(
     context: highlevel_verification_lib.HighLevelContext,
 ) -> Tuple[List[z3.ExprRef], List[z3.ExprRef]]:
@@ -2710,7 +2449,6 @@ def run_promote_example(
     function_imples = {
         "ON_star": on.on_star_implementation,
         "ON_star_zero": on.on_star_implementation,
-        "Top": on.top_implementation,
     }
     promoted = quant_enum_merge.promote_exists_to_forall_right_z3(
         candidate, base_envs, domain, function_imples
@@ -2732,7 +2470,7 @@ def quant_enum_merge_test(
             "x5": (10.0, 10.0, 0.0),
         }
     ]
-    relations = [context.ON_star, "equality", context.Top]
+    relations = [context.ON_star, "equality"]
     b0, b = context.get_consts("b0"), context.get_consts("b")
     x, y = context.get_consts("x"), context.get_consts("y")
     m, n = context.get_consts("m"), context.get_consts("n")
@@ -2745,7 +2483,6 @@ def quant_enum_merge_test(
     function_imples = {
         "ON_star": on.on_star_implementation,
         "ON_star_zero": on.on_star_implementation,
-        "Top": on.top_implementation,
     }
     env = {"b0": [0.0, 0.0, 0.0], "b": [0.0, 0.0, 0.1]}
     quant_enum_merge.eval_quantified_expr(py_expr, env, domain, function_imples)
@@ -2755,7 +2492,7 @@ def quant_enum_merge_test(
     )
     print(py_rst)
 
-    test_z3_expr_1 = z3.Exists([y], context.Top(y))
+    test_z3_expr_1 = z3.Exists([y], z3.Not(context.ON_star(b0, y)))
     test_z3_expr_2 = z3.Exists([y], context.ON_star(y, b0))
 
     test_expr_1 = quant_enum_merge.z3_to_python_expr(test_z3_expr_1)
@@ -2813,7 +2550,6 @@ def quant_enum_merge_test(
     func_maps = {
         "ON_star": context.ON_star,
         "ON_star_zero": context.ON_star_zero,
-        "Top": context.Top,
     }
     var_maps = {"b0": b0, "b": b}
     quant_enum_merge_expr = quant_enum_merge.python_expr_to_z3(

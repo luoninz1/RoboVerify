@@ -18,11 +18,13 @@
 			<body name="robot0:head_pan_link" pos="0.0531 0 0.603">
 				<inertial diaginertia="0.0185 0.0128 0.0095" mass="2.2556" pos="0.0321 0.0161 0.039" quat="0.5148 0.5451 -0.453 0.4823"></inertial>
 				<joint axis="0 0 1" name="robot0:head_pan_joint" range="-1.57 1.57"></joint>
-				<geom mesh="robot0:head_pan_link" name="robot0:head_pan_link" material="robot0:head_mat" class="robot0:grey"></geom>
+				<!-- Head contacts are outside the chosen Fetch manipulation model.
+				     Retain visual geometry and the explicit inertial properties. -->
+				<geom mesh="robot0:head_pan_link" name="robot0:head_pan_link" material="robot0:head_mat" class="robot0:grey" contype="0" conaffinity="0"></geom>
 				<body name="robot0:head_tilt_link" pos="0.1425 0 0.058">
 					<inertial diaginertia="0.0063 0.0059 0.0014" mass="0.9087" pos="0.0081 0.0025 0.0113" quat="0.6458 0.66 -0.274 0.2689"></inertial>
 					<joint axis="0 1 0" damping="1000" name="robot0:head_tilt_joint" range="-0.76 1.45" ref="0.06"></joint>
-					<geom mesh="robot0:head_tilt_link" name="robot0:head_tilt_link" material="robot0:head_mat" class="robot0:blue"></geom>
+					<geom mesh="robot0:head_tilt_link" name="robot0:head_tilt_link" material="robot0:head_mat" class="robot0:blue" contype="0" conaffinity="0"></geom>
 					<body name="robot0:head_camera_link" pos="0.055 0 0.0225">
 						<inertial diaginertia="0 0 0" mass="0" pos="0.055 0 0.0225"></inertial>
 						<body name="robot0:head_camera_rgb_frame" pos="0 0.02 0">

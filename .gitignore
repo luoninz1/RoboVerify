@@ -1,10 +1,31 @@
+# Python
 *pyc
 roboverify/.runtime/
+__pycache__/
 myenv/*
-roboverify/MCMC_results
+
+# Tooling state
+.claude/worktrees/
+tmux-*.log
+
+# ---------------------------------------------------------------------------
+# Experiment output: regenerable, and large enough that committing it would
+# permanently bloat the repository (these directories currently hold ~190MB
+# against a 19MB .git). Patterns are deliberately specific rather than blanket
+# *.png / *.npy, because 14 .png asset files are legitimately tracked.
+# ---------------------------------------------------------------------------
+
+# Instrumented run directories (synthesis/experiment/run_logger.py)
+roboverify/runs/
+
+# MCMC search and rollout output
+roboverify/MCMC_results*
+roboverify/random_rollouts_after_*
+roboverify/demo_splits_with_*
+
+# Rendered frames, plots and videos
 roboverify/images
 roboverify/synthesis/images
-roboverify/synthesis/trained
 roboverify/notebooks/insertion_sort_invariant_practice.html
 roboverify/notebooks/robotic_insertion_sort_initial_state.png
 roboverify/notebooks/insertion_sort_invariant_practice_files/libs/bootstrap/bootstrap-81267100e462c21b3d6c0d5bf76a3417.min.css
@@ -23,3 +44,21 @@ roboverify/notebooks/insertion_sort_invariant_practice_files/libs/quarto-html/ta
 Claude outputs/hoare-triple-note.md
 roboverify/synthesis/examples/robotic_insertion_sort.py
 roboverify/notebooks/robotic_insertion_sort.html
+roboverify/api_test/
+roboverify/demo_images/
+roboverify/final_plots/
+final_plots/
+roboverify/decision_tree*.png
+roboverify/last.png
+roboverify/synthesis/entry/envs.png
+roboverify/*.mp4
+
+# Result bundles
+roboverify/final_results/
+roboverify/final_results_submission/
+
+# Trained models
+roboverify/synthesis/trained
+
+# Scratch MuJoCo XML written by the environment at runtime
+roboverify/synthesis/environment/cee_us_env/fpp_construction/assets/fetch/tmp*.xml

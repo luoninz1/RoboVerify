@@ -164,7 +164,8 @@ class TestBmcStackingProgram(unittest.TestCase):
     def test_bmc_unsat_pick2_goal_still_on_1_0(self):
         """
         Program manipulates block **2**, but the goal remains ``ON(1, 0)``.
-        Block **1** is never grasped, so its ``(x,y)`` never changes from the
+        Block **1** is never grasped or supported by the carried block, so its
+        ``(x,y)`` never changes from the
         initial separation from block **0** → ``ON(1, 0)`` is unsat.
         """
         prog = self._program_pick_block2_moves_use2()
@@ -185,7 +186,26 @@ class TestBmcStackingProgram(unittest.TestCase):
         def goal(s):
             return goal_on_box_ids(s, 1, 0)
 
-        sat, model, out_sym = bmc_solve(prog, goal, initial_constraints=make_init)
+        # D2 allows disturbance when the carried block is moved underneath an
+        # untouched block. State the no-support-contact premise this regression
+        # needs; otherwise arbitrary solve-mode offsets can create that contact.
+        def no_support_contact(s):
+            return [
+                z3.Or(
+                    z3.Abs(s.bx[other][t] - s.bx["2"][t]) >= 0.025,
+                    z3.Abs(s.by[other][t] - s.by["2"][t]) >= 0.025,
+                    s.bz[other][t] <= s.bz["2"][t],
+                )
+                for t in range(s.T)
+                for other in ("0", "1")
+            ]
+
+        sat, model, out_sym = bmc_solve(
+            prog,
+            goal,
+            initial_constraints=make_init,
+            extra_constraints=no_support_contact,
+        )
         self.assertFalse(sat)
         self.assertIsNone(model)
         self.assertEqual(out_sym.block_names, ("0", "1", "2"))

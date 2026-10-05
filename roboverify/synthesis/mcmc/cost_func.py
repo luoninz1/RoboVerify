@@ -101,3 +101,96 @@ def kl_divergence_kde(states_P, states_Q, n_samples=10000):
     q_vals = np.clip(q_vals, epsilon, None)
     kl = np.mean(np.log(p_vals / q_vals))
     return kl
+
+
+def _flatten_states(states) -> np.ndarray:
+    """Convert a batch of states to a 2D float array."""
+    arr = np.asarray(states, dtype=np.float64)
+    if arr.ndim == 1:
+        return arr[:, None]
+    return arr.reshape(arr.shape[0], -1)
+
+
+def _sample_rows(states: np.ndarray, max_samples: int, rng: np.random.Generator) -> np.ndarray:
+    """Subsample rows without replacement to bound pairwise MMD cost."""
+    if len(states) <= max_samples:
+        return states
+    indices = rng.choice(len(states), size=max_samples, replace=False)
+    return states[indices]
+
+
+def _median_heuristic_bandwidth(X: np.ndarray, Y: np.ndarray) -> float:
+    """Choose an RBF bandwidth from pairwise distances over combined samples."""
+    combined = np.vstack([X, Y])
+    if len(combined) < 2:
+        return 1.0
+    sq_norms = np.sum(combined * combined, axis=1, keepdims=True)
+    sq_dists = sq_norms + sq_norms.T - 2.0 * combined @ combined.T
+    sq_dists = np.maximum(sq_dists, 0.0)
+    upper = sq_dists[np.triu_indices_from(sq_dists, k=1)]
+    positive = upper[upper > 0.0]
+    if len(positive) == 0:
+        return 1.0
+    return float(np.sqrt(np.median(positive)))
+
+
+def _rbf_kernel(X: np.ndarray, Y: np.ndarray, bandwidth: float) -> np.ndarray:
+    """Compute an RBF kernel matrix."""
+    bandwidth = max(float(bandwidth), 1e-6)
+    gamma = 1.0 / (2.0 * bandwidth * bandwidth)
+    X_sq = np.sum(X * X, axis=1, keepdims=True)
+    Y_sq = np.sum(Y * Y, axis=1, keepdims=True).T
+    sq_dists = X_sq + Y_sq - 2.0 * X @ Y.T
+    sq_dists = np.maximum(sq_dists, 0.0)
+    return np.exp(-gamma * sq_dists)
+
+
+def maximum_mean_discrepancy_rbf(
+    states_P,
+    states_Q,
+    bandwidth: float | None = None,
+    max_samples: int = 512,
+    random_state: int = 42,
+) -> float:
+    """
+    Estimate squared MMD between two state distributions with an RBF kernel.
+
+    Uses the unbiased estimator and standardizes the joint sample first so the
+    kernel bandwidth is not dominated by raw feature scale.
+    """
+    X = _flatten_states(states_P)
+    Y = _flatten_states(states_Q)
+    if len(X) == 0 or len(Y) == 0:
+        raise ValueError("MMD requires non-empty state sets")
+
+    rng = np.random.default_rng(random_state)
+    X = _sample_rows(X, max_samples=max_samples, rng=rng)
+    Y = _sample_rows(Y, max_samples=max_samples, rng=rng)
+
+    combined = np.vstack([X, Y])
+    mean = combined.mean(axis=0, keepdims=True)
+    std = combined.std(axis=0, keepdims=True)
+    std = np.where(std < 1e-8, 1.0, std)
+    X = (X - mean) / std
+    Y = (Y - mean) / std
+
+    if bandwidth is None:
+        bandwidth = _median_heuristic_bandwidth(X, Y)
+
+    K_xx = _rbf_kernel(X, X, bandwidth)
+    K_yy = _rbf_kernel(Y, Y, bandwidth)
+    K_xy = _rbf_kernel(X, Y, bandwidth)
+
+    n = len(X)
+    m = len(Y)
+    if n < 2 or m < 2:
+        return 0.0
+
+    np.fill_diagonal(K_xx, 0.0)
+    np.fill_diagonal(K_yy, 0.0)
+    mmd2 = (
+        K_xx.sum() / (n * (n - 1))
+        + K_yy.sum() / (m * (m - 1))
+        - 2.0 * K_xy.mean()
+    )
+    return float(max(mmd2, 0.0))

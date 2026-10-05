@@ -21,6 +21,8 @@ from z3 import (
     unsat,
 )
 
+from synthesis.util.symbols import fresh_const
+
 try:
     from PIL import Image, ImageDraw, ImageFont
 except Exception:
@@ -32,6 +34,12 @@ except Exception:
 @dataclass
 class InvariantSpec:
     data: Dict[str, Any]
+
+
+# Bounds a single VC query. Generous on purpose: this must not turn a slow but
+# currently-passing verification condition into a failure, only stop an
+# unbounded hang.
+VC_CHECK_TIMEOUT_MS = 300_000
 
 
 class HighLevelContext:
@@ -47,7 +55,9 @@ class HighLevelContext:
         visualize_enum_scene: bool = False,
         visualization_prefix: str = "highlevel_scene",
         verification_mode: str = "box",
+        sort_name: str = "Box",
     ):
+        self.sort_name = sort_name
         self.mode = mode
         self.num_blocks = num_blocks
         self.enum_names = enum_names
@@ -68,7 +78,7 @@ class HighLevelContext:
         if self.verification_mode == "goals":
             return
         if self.mode == "declare":
-            self.BoxSort = DeclareSort("Box")
+            self.BoxSort = DeclareSort(self.sort_name)
             self.enum_blocks = []
             self.enum_names_effective: List[str] = []
         elif self.mode == "enum":
@@ -77,7 +87,7 @@ class HighLevelContext:
                 if self.num_blocks is None:
                     raise ValueError("enum mode requires enum_names or num_blocks.")
                 names = [f"b{9+i}" for i in range(self.num_blocks)]
-            self.BoxSort, enum_consts = EnumSort("Box", names)
+            self.BoxSort, enum_consts = EnumSort(self.sort_name, names)
             self.enum_blocks = list(enum_consts)
             self.enum_names_effective = list(names)
         else:
@@ -89,7 +99,6 @@ class HighLevelContext:
         )
         self.Higher = Function("Higher", self.BoxSort, self.BoxSort, BoolSort())
         self.Scattered = Function("Scattered", self.BoxSort, self.BoxSort, BoolSort())
-        self.Top = Function("Top", self.BoxSort, BoolSort())
 
     def _resolve_goal_enum_names(self) -> List[str]:
         """Finite Goal universe for ``mode=='enum'`` (goal nodes only, no ``null`` ctor)."""
@@ -150,7 +159,7 @@ class HighLevelContext:
         return c
 
     def add_axiom_higher(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
                 [x, y, c],
@@ -190,7 +199,7 @@ class HighLevelContext:
             )
 
     def add_axiom_scattered(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll([x, y], self.Scattered(x, y) == self.Scattered(y, x)), "scattered1"
         )
@@ -216,7 +225,7 @@ class HighLevelContext:
         if self.GoalSort is None:
             return
 
-        x, y, z = Consts("x y z", self.GoalSort)
+        x, y, z = [fresh_const(self.GoalSort, name) for name in ("x", "y", "z")]
         # dtca on d_star
         s.assert_and_track(ForAll([x], self.d_star(x, x)), "d_refl")
         s.assert_and_track(
@@ -342,7 +351,7 @@ class HighLevelContext:
             raise ValueError(
                 "Goal relational helpers require verification_mode='goals'."
             )
-        t = Const("t_f", self.GoalSort)
+        t = fresh_const(self.GoalSort, "next_goal", avoid=(a, b, self.null))
         return And(
             self._f_plus(rel, a, b),
             ForAll([t], Implies(self._f_plus(rel, a, t), rel(b, t))),
@@ -353,7 +362,7 @@ class HighLevelContext:
             raise ValueError(
                 "Goal relational helpers require verification_mode='goals'."
             )
-        t = Const("t_ft", self.GoalSort)
+        t = fresh_const(self.GoalSort, "terminal_goal", avoid=(a, b, self.null))
         return Or(
             self.f_(rel, a, b),
             And(b == self.null, ForAll([t], Not(self._f_plus(rel, a, t)))),
@@ -387,7 +396,7 @@ class HighLevelContext:
         return And(self._flat_order(a, b), self._flat_order(b, c))
 
     def add_axiom(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
                 [x, y, c],
@@ -451,7 +460,7 @@ class HighLevelContext:
             )
 
     def add_axiom_on_star_zero(self, s: Solver):
-        x, y, c = Consts("x y c", self.BoxSort)
+        x, y, c = [fresh_const(self.BoxSort, name) for name in ("x", "y", "c")]
         s.assert_and_track(
             ForAll(
                 [x, y, c],
@@ -645,17 +654,41 @@ class HighLevelContext:
         else:
             print(result)
 
+    def new_solver(self, timeout_ms=VC_CHECK_TIMEOUT_MS):
+        """Domain axioms and solver options are local, independent of imports."""
+        if timeout_ms <= 0:
+            raise ValueError("Solver timeout must be positive")
+        solver = Solver()
+        solver.set(timeout=timeout_ms, unsat_core=True)
+        solver.set("smt.core.minimize", True)
+        if self.verification_mode == "goals":
+            self.add_axiom_goal_nested(solver)
+        else:
+            self.add_axiom(solver)
+            self.add_axiom_on_star_zero(solver)
+            self.add_axiom_higher(solver)
+            self.add_axiom_scattered(solver)
+        return solver
+
     def check_satisfiable(
         self,
         formula=None,
         visualize_model: bool = True,
         viz_tag: Optional[str] = None,
+        timeout_ms: int = VC_CHECK_TIMEOUT_MS,
     ):
         """Check satisfiability under axioms without negating formula.
 
         Returns (z3_result, model_or_none). The model is present only when result is sat.
+
+        The timeout bounds a query that the quantified axioms can otherwise make
+        run indefinitely. It is deliberately generous: a verification condition
+        that needs longer than this is not usable inside a counterexample-guided
+        loop anyway, and returning ``unknown`` at least says so instead of
+        wedging the run with no diagnosis.
         """
         s = Solver()
+        s.set("timeout", timeout_ms)
         if self.verification_mode == "goals":
             self.add_axiom_goal_nested(s)
         else:
@@ -738,7 +771,6 @@ class HighLevelContext:
             "ON_star_zero": self.ON_star_zero,
             "Higher": self.Higher,
             "Scattered": self.Scattered,
-            "Top": self.Top,
         }
         for name in known_const_names or []:
             decls[name] = Const(name, self.BoxSort)

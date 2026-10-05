@@ -1,1 +1,1 @@
-"""Runnable, domain-specific examples built on RoboVerify's generic APIs."""
+"""Runnable domain examples and editable standalone demonstration programs."""

@@ -4,27 +4,37 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from z3 import And, Consts, ForAll, Implies, Not, Or
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
 from synthesis.api.instructions import PickPlaceByName
 from synthesis.api.program import Assign, Program, Put, While
+from synthesis.entry.inference_options import add_inference_options
+from synthesis.entry.motion_options import add_motion_options, motion_noise_from_args
 from synthesis.entry.run_rollouts import run_program_rollouts
+from synthesis.inference_lib.demo_store import DemoStore, InvInference, tower_vocabulary
 from synthesis.inference_lib.inference import (
     instantiate_invariant,
-    run_partial_example,
     serialize_invariant,
 )
+from synthesis.verification_lib.motion_verification import (
+    MotionCheck,
+    MotionVerificationResult,
+)
+from z3 import And, Consts, ForAll, Implies, Not, Or
 
 
 def verify_partial_program_with_learned_invariant(
+    demo_store: DemoStore,
+    loop_id: str = "1",
     verification_mode: str = "infinite",
     num_blocks: int = 4,
     visualize_finite_scene: bool = True,
     visualization_prefix: str = "verify_stack",
     inference_mode: str = "finite",
+    noise=None,
+    motion_timeout_ms: int = 5000,
+    invariant_minimizer=None,
 ):
-    """Infer invariant from examples and verify the stack program."""
+    """Infer from recorded loop-head demonstrations and verify the partial program."""
     # Inference is always done in the infinite-block (DeclareSort) setting.
     if inference_mode == "finite":
         block_names = [f"b{9 + i}" for i in range(num_blocks)]
@@ -38,15 +48,23 @@ def verify_partial_program_with_learned_invariant(
             visualize_enum_scene=visualize_finite_scene,
             visualization_prefix=visualization_prefix,
         )
-        learned_invariant, learned_invariant_lists = run_partial_example(
-            context=inference_context
+        learned_invariant, learned_invariant_lists = InvInference(
+            demo_store,
+            loop_id,
+            tower_vocabulary("partial"),
+            inference_context,
+            minimizer=invariant_minimizer,
         )
     else:
         inference_context = highlevel_verification_lib.HighLevelContext(
             mode="declare", use_tbl=True, exists_top=True
         )
-        learned_invariant, learned_invariant_lists = run_partial_example(
-            context=inference_context
+        learned_invariant, learned_invariant_lists = InvInference(
+            demo_store,
+            loop_id,
+            tower_vocabulary("partial"),
+            inference_context,
+            minimizer=invariant_minimizer,
         )
 
     if verification_mode == "finite":
@@ -122,14 +140,34 @@ def verify_partial_program_with_learned_invariant(
     )
 
     hl_ok = program.highlevel_verification(precondition, postcondition, context=context)
-    # ll_ok = ll_program.lowlevel_verification()
-    print(f"hl_ok: {hl_ok}")
-    # print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
-    # return bool(hl_ok and ll_ok)
+    ll_ok = MotionVerificationResult(
+        [
+            MotionCheck(
+                "coverage",
+                "unsupported",
+                reason="No lowered physical program for this task",
+            )
+        ],
+        noise,
+    )
+    print(f"hl_ok: {hl_ok}", f"ll_ok: {ll_ok}")
+    return bool(hl_ok and ll_ok)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    add_inference_options(parser)
+    add_motion_options(parser)
+    parser.add_argument(
+        "--demos",
+        required=True,
+        help="Current full-state demonstration archive with loop events.",
+    )
+    parser.add_argument(
+        "--loop-id",
+        default="1",
+        help="Instruction path of the recorded loop (default: 1).",
+    )
     parser.add_argument(
         "--verification-mode",
         choices=["infinite", "finite"],
@@ -154,8 +192,14 @@ if __name__ == "__main__":
         help="Output prefix for generated finite-mode scene images.",
     )
     args = parser.parse_args()
+    noise = motion_noise_from_args(parser, args)
 
     verify_partial_program_with_learned_invariant(
+        invariant_minimizer=args.invariant_minimizer,
+        noise=noise,
+        motion_timeout_ms=args.motion_timeout_ms,
+        demo_store=DemoStore.from_archive(args.demos),
+        loop_id=args.loop_id,
         verification_mode=args.verification_mode,
         num_blocks=args.num_blocks,
         visualize_finite_scene=not args.disable_scene_viz,

@@ -1,57 +1,29 @@
-import pdb
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
 import numpy as np
 import z3
 
+from synthesis.api.control import (
+    DEFAULT_CONTROL,
+    DEFAULT_PICK_CONTROL,
+    ControlConfig,
+    PrimitiveController,
+)
 from synthesis.util import on as on_util
 
 
-def grippers_are_closed(obs, atol=1e-3):
-    threshold = 0.026
-    gripper_state = obs[3:5]
-    return (
-        abs(np.sum(gripper_state) - 2 * threshold) < atol
-        or np.sum(gripper_state) - 2 * threshold < 0
+def _eval_primitive(instruction, env, traj, return_image, operation, *args):
+    controller = PrimitiveController(
+        env,
+        traj,
+        limit=instruction.limit,
+        control=instruction.control,
+        render=return_image,
     )
-
-
-def grippers_are_open(obs, atol=1e-3):
-    threshold = 0.026
-    gripper_state = obs[3:5]
-    # return abs(gripper_state[0] - 0.05) < atol
-    # return gripper_state[0] > threshold + atol
-    return np.sum(gripper_state) > 2 * threshold + atol
-
-
-def get_open_gripper_action():
-    return np.array([0.0, 0.0, 0.0, 0.2])
-
-
-def get_close_gripper_action():
-    return np.array([0.0, 0.0, 0.0, -0.2])
-
-
-def get_move_action(
-    observation, target_position, atol=1e-3, gain=10.0, close_gripper=False
-):
-    """
-    Move an end effector to a position and orientation.
-    """
-    # Get the currents
-    # current_position = observation['observation'][:3]
-    current_position = observation[:3]
-
-    action = gain * np.subtract(target_position, current_position)
-    if close_gripper:
-        # gripper_action = -1.
-        gripper_action = -0.2
-    else:
-        gripper_action = 0.0
-    action = np.hstack((action, gripper_action))
-
-    return action
+    getattr(controller, operation)(*args)
+    instruction.last_control_result = controller.result
+    return controller.images
 
 
 class Parameter:
@@ -82,11 +54,12 @@ class Parameter:
         parameters.append(self.numeric_val())
 
     def update(self, new_parameter: List[float]):
-        if self.pos is not None:
-            self.val = new_parameter[self.pos]
-        else:
-            pdb.set_trace()
-            raise ValueError
+        if self.pos is None:
+            raise ValueError(
+                "Parameter.update called before register: this parameter has no "
+                "slot in the trainable vector, so there is nothing to update"
+            )
+        self.val = new_parameter[self.pos]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Parameter):
@@ -124,7 +97,7 @@ class Instruction(ABC):
         mapping = getattr(env, "symbolic_name_to_box_id", None)
         if mapping is None:
             raise ValueError(
-                "PickPlaceByName requires env.symbolic_name_to_box_id (e.g. {'b0': 1})."
+                "Named instructions require env.symbolic_name_to_box_id (e.g. {'b0': 1})."
             )
         if not isinstance(mapping, dict):
             raise TypeError("env.symbolic_name_to_box_id must be a dict[str, int].")
@@ -149,64 +122,20 @@ class Skip(Instruction):
 
 
 class Pick(Instruction):
-    def __init__(self, grab_box_id: int = 0, limit: int = 50):
+    def __init__(
+        self,
+        grab_box_id: int = 0,
+        limit: int = 50,
+        *,
+        control: ControlConfig = DEFAULT_PICK_CONTROL,
+    ):
         self.limit = limit
+        self.control = control
         self.grab_box_id = grab_box_id
         self.types = ["Box"]
 
-    def get_box_pos(self, box_id, obs):
-        block_num = (obs.shape[0] - 13) // 15
-        if 0 <= box_id < block_num:
-            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
-        assert False, f"unknown box id {box_id}"
-
     def eval(self, env, traj, return_image=False):
-        imgs = []
-        obs = env.flatten_observation(env.env._get_obs())
-        target_box_x = self.get_box_pos(self.grab_box_id, obs)[0]
-        target_box_y = self.get_box_pos(self.grab_box_id, obs)[1]
-        target_z = obs[2]
-        target_position = np.array([target_box_x, target_box_y, target_z])
-        steps = 0
-        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
-            # print(np.linalg.norm(obs[:3] - target_position))
-            action = get_move_action(obs, target_position, close_gripper=False)
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-
-        while steps < self.limit and grippers_are_closed(obs):
-            action = get_open_gripper_action()
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-
-        target_box_z = self.get_box_pos(self.grab_box_id, obs)[2]
-        target_position = np.array([target_box_x, target_box_y, target_box_z])
-        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
-            action = get_move_action(obs, target_position, close_gripper=False)
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-
-        while steps < self.limit and grippers_are_open(obs):
-            action = get_close_gripper_action()
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-        return imgs
+        return _eval_primitive(self, env, traj, return_image, "pick", self.grab_box_id)
 
     def register_trainable_parameter(self, parameter: List[float]):
         return
@@ -232,65 +161,27 @@ class Pick(Instruction):
 
 
 class PickByName(Instruction):
-    def __init__(self, grab_box_name: str, limit: int = 50):
+    def __init__(
+        self,
+        grab_box_name: str,
+        limit: int = 50,
+        *,
+        control: ControlConfig = DEFAULT_PICK_CONTROL,
+    ):
         self.limit = limit
+        self.control = control
         self.grab_box_name = grab_box_name
         self.types = ["BoxName"]
 
-    def get_box_pos(self, box_id: int, obs):
-        block_num = (obs.shape[0] - 13) // 15
-        if 0 <= box_id < block_num:
-            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
-        assert False, f"unknown box id {box_id}"
-
     def eval(self, env, traj, return_image=False):
-        mapping = self._resolve(env)
-        imgs = []
-        obs = env.flatten_observation(env.env._get_obs())
-        target_box_x = self.get_box_pos(mapping[self.grab_box_name], obs)[0]
-        target_box_y = self.get_box_pos(mapping[self.grab_box_name], obs)[1]
-        target_z = obs[2]
-        target_position = np.array([target_box_x, target_box_y, target_z])
-        steps = 0
-        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
-            print(np.linalg.norm(obs[:3] - target_position))
-            action = get_move_action(obs, target_position, close_gripper=False)
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-
-        while steps < self.limit and grippers_are_closed(obs):
-            action = get_open_gripper_action()
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-
-        target_box_z = self.get_box_pos(mapping[self.grab_box_name], obs)[2]
-        target_position = np.array([target_box_x, target_box_y, target_box_z])
-        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
-            action = get_move_action(obs, target_position, close_gripper=False)
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-
-        while steps < self.limit and grippers_are_open(obs):
-            action = get_close_gripper_action()
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-        return imgs
+        return _eval_primitive(
+            self,
+            env,
+            traj,
+            return_image,
+            "pick",
+            self._resolve(env)[self.grab_box_name],
+        )
 
     def register_trainable_parameter(self, parameter: List[float]):
         return
@@ -323,8 +214,11 @@ class Move(Instruction):
         target_box_id_z: int = 0,
         limit: int = 50,
         target_offset: Optional[List[float]] = None,
+        *,
+        control: ControlConfig = DEFAULT_CONTROL,
     ):
         self.limit = limit
+        self.control = control
         self.target_box_id_x = target_box_id_x
         self.target_box_id_y = target_box_id_y
         self.target_box_id_z = target_box_id_z
@@ -336,40 +230,23 @@ class Move(Instruction):
                 raise ValueError("target_offset must be a length-3 list of floats.")
             self.target_offset = [Parameter(float(v)) for v in target_offset]
 
-    def get_box_pos(self, box_id, obs):
-        block_num = (obs.shape[0] - 13) // 15
-        if 0 <= box_id < block_num:
-            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
-        assert False, f"unknown box id {box_id}"
-
     def eval(self, env, traj, return_image=False):
-        imgs = []
-        obs = env.flatten_observation(env.env._get_obs())
-        target_box_x = (
-            self.get_box_pos(self.target_box_id_x, obs)[0]
-            + self.target_offset[0].numeric_val()
+        return _eval_primitive(
+            self,
+            env,
+            traj,
+            return_image,
+            "move_relative",
+            (self.target_box_id_x, self.target_box_id_y, self.target_box_id_z),
+            [p.numeric_val() for p in self.target_offset],
         )
-        target_box_y = (
-            self.get_box_pos(self.target_box_id_y, obs)[1]
-            + self.target_offset[1].numeric_val()
-        )
-        target_box_z = (
-            self.get_box_pos(self.target_box_id_z, obs)[2]
-            + self.target_offset[2].numeric_val()
-        )
-        target_position = np.array([target_box_x, target_box_y, target_box_z])
-        steps = 0
-        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
-            action = get_move_action(obs, target_position, close_gripper=True)
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
+        # All three components: the x and y offsets were sliced off here, which
+        # left CEM optimizing only the release height and pinned every lateral
+        # placement at whatever the mutation happened to propose. `MoveByName`,
+        # which is the same instruction with symbolic operands, always exposed
+        # all three.
         for p in self.target_offset:
             p.register(parameter)
 
@@ -410,8 +287,11 @@ class MoveByName(Instruction):
         target_box_name_z: str,
         limit: int = 50,
         target_offset: Optional[List[float]] = None,
+        *,
+        control: ControlConfig = DEFAULT_CONTROL,
     ):
         self.limit = limit
+        self.control = control
         self.target_box_name_x = target_box_name_x
         self.target_box_name_y = target_box_name_y
         self.target_box_name_z = target_box_name_z
@@ -423,39 +303,20 @@ class MoveByName(Instruction):
                 raise ValueError("target_offset must be a length-3 list of floats.")
             self.target_offset = [Parameter(float(v)) for v in target_offset]
 
-    def get_box_pos(self, box_id: int, obs):
-        block_num = (obs.shape[0] - 13) // 15
-        if 0 <= box_id < block_num:
-            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
-        assert False, f"unknown box id {box_id}"
-
     def eval(self, env, traj, return_image=False):
-        mapping = self._resolve(env)
-        imgs = []
-        obs = env.flatten_observation(env.env._get_obs())
-        target_box_x = (
-            self.get_box_pos(mapping[self.target_box_name_x], obs)[0]
-            + self.target_offset[0].numeric_val()
+        return _eval_primitive(
+            self,
+            env,
+            traj,
+            return_image,
+            "move_relative",
+            (
+                self._resolve(env)[self.target_box_name_x],
+                self._resolve(env)[self.target_box_name_y],
+                self._resolve(env)[self.target_box_name_z],
+            ),
+            [p.numeric_val() for p in self.target_offset],
         )
-        target_box_y = (
-            self.get_box_pos(mapping[self.target_box_name_y], obs)[1]
-            + self.target_offset[1].numeric_val()
-        )
-        target_box_z = (
-            self.get_box_pos(mapping[self.target_box_name_z], obs)[2]
-            + self.target_offset[2].numeric_val()
-        )
-        target_position = np.array([target_box_x, target_box_y, target_box_z])
-        steps = 0
-        while steps < self.limit and np.linalg.norm(obs[:3] - target_position) > 2e-2:
-            action = get_move_action(obs, target_position, close_gripper=True)
-            env.step(action)
-            obs = env.flatten_observation(env.env._get_obs())
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(obs)
-        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         for p in self.target_offset:
@@ -497,52 +358,26 @@ class Release(Instruction):
         limit: int = 50,
         *,
         target_z: float | None = None,
+        control: ControlConfig = DEFAULT_CONTROL,
     ):
         self.limit = limit
+        self.control = control
         self.release_box_id = release_box_id
         self.types = ["Box"]
         self.target_z_offset = (
             Parameter(float(target_z)) if target_z is not None else Parameter()
         )
 
-    def get_box_pos(self, box_id, obs):
-        block_num = (obs.shape[0] - 13) // 15
-        if 0 <= box_id < block_num:
-            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
-        assert False, f"unknown box id {box_id}"
-
     def eval(self, env, traj, return_image=False):
-        imgs = []
-        obs = env.flatten_observation(env.env._get_obs())
-        target_z = (
-            self.get_box_pos(self.release_box_id, obs)[2]
-            + self.target_z_offset.numeric_val()
+        return _eval_primitive(
+            self,
+            env,
+            traj,
+            return_image,
+            "release",
+            self.release_box_id,
+            self.target_z_offset.numeric_val(),
         )
-        steps = 0
-        while steps < self.limit and grippers_are_closed(
-            env.flatten_observation(env.env._get_obs())
-        ):
-            action = get_open_gripper_action()
-            env.step(action)
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(env.flatten_observation(env.env._get_obs()))
-        while (
-            steps < self.limit
-            and abs(env.flatten_observation(env.env._get_obs())[2] - target_z) > 2e-2
-        ):
-            action = get_move_action(
-                np.array([0.0, 0.0, env.flatten_observation(env.env._get_obs())[2]]),
-                np.array([0.0, 0.0, target_z]),
-                close_gripper=False,
-            )
-            env.step(action)
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(env.flatten_observation(env.env._get_obs()))
-        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         self.target_z_offset.register(parameter)
@@ -574,53 +409,26 @@ class ReleaseByName(Instruction):
         limit: int = 50,
         *,
         target_z: float | None = None,
+        control: ControlConfig = DEFAULT_CONTROL,
     ):
         self.limit = limit
+        self.control = control
         self.release_box_name = release_box_name
         self.types = ["BoxName"]
         self.target_z_offset = (
             Parameter(float(target_z)) if target_z is not None else Parameter()
         )
 
-    def get_box_pos(self, box_id: int, obs):
-        block_num = (obs.shape[0] - 13) // 15
-        if 0 <= box_id < block_num:
-            return obs[10 + box_id * 12 : 10 + box_id * 12 + 3]
-        assert False, f"unknown box id {box_id}"
-
     def eval(self, env, traj, return_image=False):
-        mapping = self._resolve(env)
-        imgs = []
-        obs = env.flatten_observation(env.env._get_obs())
-        target_z = (
-            self.get_box_pos(mapping[self.release_box_name], obs)[2]
-            + self.target_z_offset.numeric_val()
+        return _eval_primitive(
+            self,
+            env,
+            traj,
+            return_image,
+            "release",
+            self._resolve(env)[self.release_box_name],
+            self.target_z_offset.numeric_val(),
         )
-        steps = 0
-        while steps < self.limit and grippers_are_closed(
-            env.flatten_observation(env.env._get_obs())
-        ):
-            action = get_open_gripper_action()
-            env.step(action)
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(env.flatten_observation(env.env._get_obs()))
-        while (
-            steps < self.limit
-            and abs(env.flatten_observation(env.env._get_obs())[2] - target_z) > 1e-3
-        ):
-            action = get_move_action(
-                np.array([0.0, 0.0, env.flatten_observation(env.env._get_obs())[2]]),
-                np.array([0.0, 0.0, target_z]),
-                close_gripper=False,
-            )
-            env.step(action)
-            steps += 1
-            if return_image:
-                imgs.append(env.render())
-            traj.append(env.flatten_observation(env.env._get_obs()))
-        return imgs
 
     def register_trainable_parameter(self, parameter: List[float]):
         self.target_z_offset.register(parameter)
@@ -841,6 +649,10 @@ class PickPlaceByName(Instruction):
         )
 
 
+class LoopBudgetExceeded(TimeoutError):
+    """Execution stopped with a true guard; this is not a normal loop exit."""
+
+
 class While(Instruction):
     def __init__(
         self,
@@ -861,7 +673,9 @@ class While(Instruction):
             if len(guard_exists_vars) == 0
             else z3.Exists(guard_exists_vars, instantiated_cond)
         )
-        self.max_iters = int(max_iters)
+        self.max_iters = None if max_iters is None else int(max_iters)
+        if self.max_iters is not None and self.max_iters < 0:
+            raise ValueError("Loop iteration budget must be nonnegative")
         # Optional structured provenance for learned invariants:
         # list of objects with attribute `.expr` (z3.ExprRef) and metadata.
         self.invariant_provenance = (
@@ -900,176 +714,107 @@ class While(Instruction):
         return [on_util.get_block_pos(obs, i) for i in range(num_blocks)]
 
     def _eval_z3_guard(self, z3_expr, bindings, all_block_pos):
-        """Evaluate a restricted subset of Z3 Bool formulas under concrete bindings.
+        from synthesis.api.guard_eval import evaluate_z3
+        from synthesis.predicates.scene import Scene
 
-        - `bindings` maps variable names (str) -> block index (int)
-        - `all_block_pos` is a list of xyz arrays for each block id
-        """
-
-        def eval_term(term, bound_vals):
-            if z3.is_var(term):
-                return bound_vals[z3.get_var_index(term)]
-            if z3.is_app(term) and term.num_args() == 0:
-                # Free constant like `b0`, `b`, `b_prime`, `tbl` (if present).
-                name = term.decl().name()
-                if name in bindings:
-                    return bindings[name]
-                raise KeyError(
-                    f"While guard evaluation could not resolve symbol {name!r}; "
-                    f"available: {sorted(bindings.keys())}"
-                )
-            raise TypeError(f"Unsupported Z3 term in guard: {term}")
-
-        def eval_bool(expr, bound_vals):
-            if z3.is_true(expr):
-                return True
-            if z3.is_false(expr):
-                return False
-            if z3.is_quantifier(expr):
-                body = expr.body()
-                k = expr.num_vars()
-                # De Bruijn index 0 is the innermost variable; Z3 exposes it the same way.
-                all_ids = list(range(len(all_block_pos)))
-
-                def rec(i, cur):
-                    if i == k:
-                        return eval_bool(body, cur)
-                    if expr.is_forall():
-                        for bid in all_ids:
-                            if not rec(i + 1, cur + [bid]):
-                                return False
-                        return True
-                    # Exists
-                    for bid in all_ids:
-                        if rec(i + 1, cur + [bid]):
-                            return True
-                    return False
-
-                return rec(0, bound_vals)
-
-            if not z3.is_app(expr):
-                raise TypeError(f"Unsupported Z3 guard node: {expr}")
-
-            op = expr.decl().kind()
-            if op == z3.Z3_OP_NOT:
-                return not eval_bool(expr.arg(0), bound_vals)
-            if op == z3.Z3_OP_AND:
-                return all(
-                    eval_bool(expr.arg(i), bound_vals) for i in range(expr.num_args())
-                )
-            if op == z3.Z3_OP_OR:
-                return any(
-                    eval_bool(expr.arg(i), bound_vals) for i in range(expr.num_args())
-                )
-            if op == z3.Z3_OP_IMPLIES:
-                a = eval_bool(expr.arg(0), bound_vals)
-                b = eval_bool(expr.arg(1), bound_vals)
-                return (not a) or b
-            if op == z3.Z3_OP_IFF:
-                a = eval_bool(expr.arg(0), bound_vals)
-                b = eval_bool(expr.arg(1), bound_vals)
-                return a == b
-            if op == z3.Z3_OP_EQ:
-                return eval_term(expr.arg(0), bound_vals) == eval_term(
-                    expr.arg(1), bound_vals
-                )
-            if op == z3.Z3_OP_DISTINCT:
-                vals = [
-                    eval_term(expr.arg(i), bound_vals) for i in range(expr.num_args())
-                ]
-                return len(set(vals)) == len(vals)
-
-            # Uninterpreted predicates from our verification context.
-            name = expr.decl().name()
-            if name in {"ON_star", "ON_star_zero"}:
-                a = eval_term(expr.arg(0), bound_vals)
-                b = eval_term(expr.arg(1), bound_vals)
-                return on_util.on_star_implementation(
-                    all_block_pos[a], all_block_pos[b]
-                )
-            if name == "Higher":
-                a = eval_term(expr.arg(0), bound_vals)
-                b = eval_term(expr.arg(1), bound_vals)
-                return on_util.higher_implementation(all_block_pos[a], all_block_pos[b])
-            if name == "Scattered":
-                a = eval_term(expr.arg(0), bound_vals)
-                b = eval_term(expr.arg(1), bound_vals)
-                return on_util.scattered_implementation(
-                    all_block_pos[a], all_block_pos[b]
-                )
-            if name == "Top":
-                a = eval_term(expr.arg(0), bound_vals)
-                return on_util.top_implementation(all_block_pos[a], all_block_pos)
-
-            raise TypeError(
-                f"Unsupported Z3 operator/predicate in guard: {name} ({expr})"
-            )
-
-        return eval_bool(z3_expr, [])
+        return evaluate_z3(z3_expr, Scene(dict(enumerate(all_block_pos)), bindings))
 
     def _find_and_bind_guard_exists(self, env, traj) -> bool:
-        """Try to satisfy `instantiated_cond` by choosing guard_exists_vars.
+        from synthesis.api.guard_eval import find_and_bind
 
-        If satisfiable, mutate `env.symbolic_name_to_box_id` to bind the chosen
-        existential variables (by name) to concrete block IDs, and return True.
+        return find_and_bind(self, env, traj)
+
+    def eval(
+        self,
+        env,
+        traj,
+        return_image=False,
+        *,
+        on_loop_head=None,
+        loop_id="loop",
+        on_event=None,
+        max_loop_iterations=None,
+    ) -> List:
+        """Execute the loop, optionally reporting a snapshot before each body.
+
+        The callback receives a LoopHeadState after existential guard binding.
+        The entry snapshot belongs to this invocation, not the whole program or
+        an earlier rollout. Exit states and iterations beyond max_iters are not
+        learning rows.
         """
-        mapping = getattr(env, "symbolic_name_to_box_id", None)
-        if mapping is None or not isinstance(mapping, dict):
-            raise ValueError(
-                "While.eval requires env.symbolic_name_to_box_id to exist as a dict[str, int]."
+        from synthesis.api.runtime import emit, execute_instruction
+        from synthesis.predicates.scene import scene_from_obs
+
+        entry_index = len(traj) - 1
+        emit(on_event, "loop_enter", loop_id, env, traj, entry_index=entry_index)
+
+        self._guard_entry_positions = scene_from_obs(
+            traj[-1],
+            self._get_num_blocks(env, traj[-1]),
+            getattr(env, "symbolic_name_to_box_id", {}),
+            include_table="tbl" in getattr(env, "symbolic_name_to_box_id", {}),
+        ).positions
+        if on_loop_head is not None:
+            from synthesis.inference_lib.demo_store import (
+                LoopHeadState,
+                observation_positions,
             )
 
-        obs = traj[-1]
-        num_blocks = self._get_num_blocks(env, obs)
-
-        all_block_pos = self._build_block_positions(obs, num_blocks)
-        all_ids = list(range(num_blocks))
-
-        # Base bindings come from current symbolic mapping.
-        base_bindings = {str(k): int(v) for k, v in mapping.items()}
-
-        # Support multiple existential vars by nested iteration.
-        guard_names = [
-            v.decl().name() if hasattr(v, "decl") else str(v)
-            for v in self.guard_exists_vars
-        ]
-
-        def rec(i, cur_bindings):
-            if i == len(guard_names):
-                return (
-                    cur_bindings
-                    if self._eval_z3_guard(
-                        self.instantiated_cond, cur_bindings, all_block_pos
-                    )
-                    else None
-                )
-            name_i = guard_names[i]
-            for bid in all_ids:
-                nxt = dict(cur_bindings)
-                nxt[name_i] = bid
-                sol = rec(i + 1, nxt)
-                if sol is not None:
-                    return sol
-            return None
-
-        sol = rec(0, base_bindings)
-        if sol is None:
-            return False
-        for name in guard_names:
-            mapping[name] = int(sol[name])
-        return True
-
-    def eval(self, env, traj, return_image=False) -> List:
-        # Runtime execution: evaluate the synthesized (Z3) guard by searching over
-        # concrete blocks, and bind the existential variable(s) into the env mapping.
+            num_blocks = self._get_num_blocks(env, traj[-1])
+            entry_positions = observation_positions(traj[-1], num_blocks)
         imgs: List = []
         iters = 0
+        limits = [v for v in (self.max_iters, max_loop_iterations) if v is not None]
+        limit = min(limits) if limits else None
         while self._find_and_bind_guard_exists(env, traj):
             iters += 1
-            if iters > self.max_iters:
-                break
-            for instr in self.body:
-                imgs.extend(instr.eval(env, traj, return_image=return_image))
+            if limit is not None and iters > limit:
+                raise LoopBudgetExceeded(
+                    f"Loop {loop_id} still has a guard witness after {limit} iterations"
+                )
+            emit(
+                on_event,
+                "loop_head",
+                loop_id,
+                env,
+                traj,
+                entry_index=entry_index,
+                iteration=iters - 1,
+                witnesses=list(map(str, self.guard_exists_vars)),
+            )
+            if on_loop_head is not None:
+                on_loop_head(
+                    LoopHeadState.from_observation(
+                        loop_id,
+                        traj[-1],
+                        entry_positions,
+                        env.symbolic_name_to_box_id,
+                        num_blocks,
+                    )
+                )
+            for index, instr in enumerate(self.body):
+                imgs.extend(
+                    execute_instruction(
+                        instr,
+                        env,
+                        traj,
+                        path=f"{loop_id}.{index}",
+                        return_image=return_image,
+                        on_loop_head=on_loop_head,
+                        on_event=on_event,
+                        max_loop_iterations=max_loop_iterations,
+                    )
+                )
+        emit(
+            on_event,
+            "loop_exit",
+            loop_id,
+            env,
+            traj,
+            entry_index=entry_index,
+            iteration=iters,
+            witnesses=list(map(str, self.guard_exists_vars)),
+        )
         return imgs
 
     def register_trainable_parameter(self, parameters: List):
@@ -1106,7 +851,7 @@ class Put(Instruction):
         self.upper_block = upper_block
 
     def __str__(self):
-        return f"put({self.base_block}, {self.upper_block})"
+        return f"put({self.upper_block}, {self.base_block})"
 
     def eval(self, env, traj, return_image=False) -> List:
         # `Put` is a logical/table-level operation in the stack DSL.
@@ -1223,3 +968,25 @@ class Seq:
 
     def __str__(self):
         return f"Seq({self.s1}, {self.s2})"
+
+
+class Get(Instruction):
+    """Bind one or more names once; absence of a witness is an explicit failure."""
+
+    def __init__(self, var, cond, exists_vars=None, *, guard_term=None):
+        self.var = var
+        self.instantiated_cond = cond
+        self.guard_exists_vars = list(exists_vars) if exists_vars is not None else [var]
+        self.guard_term = guard_term
+
+    _get_num_blocks = While._get_num_blocks
+
+    def eval(self, env, traj, return_image=False):
+        from synthesis.api.guard_eval import NoGuardWitness, find_and_bind
+
+        if not find_and_bind(self, env, traj):
+            raise NoGuardWitness(f"No witness for {self.instantiated_cond}")
+        return []
+
+    def __str__(self):
+        return f"get({self.var}, {self.instantiated_cond})"

@@ -2,15 +2,36 @@ import itertools
 import os
 import random
 from copy import deepcopy
-
-import numpy as np
 from pathlib import Path
 from typing import List, Optional, Sequence, Union
 
+import numpy as np
+import synthesis.inference_lib.inference
+import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
+from synthesis.api.instructions import (
+    Assign,
+    Get,
+    GoalAssign,
+    Instruction,
+    MarkGoal,
+    Move,
+    MoveByName,
+    MoveDown,
+    MoveRight,
+    Pick,
+    PickByName,
+    Put,
+    Release,
+    ReleaseByName,
+    Seq,
+    Skip,
+    While,
+)
+from synthesis.util.symbols import fresh_const, rewrite_quantifier
 from z3 import (
     Z3_OP_UNINTERPRETED,
     And,
-    Const,
     Consts,
     Exists,
     ForAll,
@@ -32,28 +53,6 @@ from z3 import (
     substitute,
     substitute_vars,
     unsat,
-)
-
-import synthesis.inference_lib.inference
-import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
-import synthesis.verification_lib.lowlevel_verification_lib as lowlevel_verification_lib
-from synthesis.api.instructions import (
-    Assign,
-    GoalAssign,
-    Instruction,
-    MarkGoal,
-    Move,
-    MoveByName,
-    MoveDown,
-    MoveRight,
-    Pick,
-    PickByName,
-    Put,
-    Release,
-    ReleaseByName,
-    Seq,
-    Skip,
-    While,
 )
 
 
@@ -516,26 +515,11 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
     """
     # Case 1: Quantifier
     if is_quantifier(expr):
-        # Extract info about the quantifier
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-
-        # Extract and rewrite the body
-        body = expr.body()
-        rewritten_body = rewrite_for_put_for_ON_star(body, b_prime, b, context)
-
-        # Rebuild the quantifier (keep same type)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        else:
-            return Exists(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_for_ON_star(body, b_prime, b, context),
+            avoid=(b_prime, b),
+        )
 
     # Case 2: Function application (And, Or, ON_star, etc.)
     elif is_app(expr):
@@ -563,23 +547,6 @@ def rewrite_for_put_for_ON_star(expr, b_prime, b, context):
         return expr
 
 
-def _push_quantifier_binders(quantifier_expr, binders):
-    """Extend de Bruijn binder stack when entering a quantifier body."""
-    num_vars = quantifier_expr.num_vars()
-    names = [quantifier_expr.var_name(i) for i in range(num_vars)]
-    sorts = [quantifier_expr.var_sort(i) for i in range(num_vars)]
-    # Innermost quantified variable has de Bruijn index 0.
-    new_consts = [Const(names[i], sorts[i]) for i in reversed(range(num_vars))]
-    return new_consts + binders
-
-
-def _resolve_box_var(expr, binders):
-    """Map a Box-sort bound variable (de Bruijn) to its named Const."""
-    if is_var(expr):
-        return binders[get_var_index(expr)]
-    return expr
-
-
 def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     """Weakest-precondition rewrite for ON_star after put(upper, tbl).
 
@@ -592,19 +559,10 @@ def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     No acyclicity guard (unlike put on a box).
     """
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_ON_star(body, b_prime, context)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_on_tbl_for_ON_star(body, b_prime, context),
+            avoid=(b_prime,),
         )
 
     if is_app(expr):
@@ -627,39 +585,20 @@ def rewrite_for_put_on_tbl_for_ON_star(expr, b_prime, context):
     return expr
 
 
-def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context, binders=None):
+def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context):
     """Weakest-precondition rewrite for Higher after put(placed_block, tbl)."""
-    if binders is None:
-        binders = []
-
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_Higher(
-            body,
-            placed_block,
-            context,
-            _push_quantifier_binders(expr, binders),
-        )
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_on_tbl_for_Higher(body, placed_block, context),
+            avoid=(placed_block,),
         )
 
     if is_app(expr):
         decl = expr.decl()
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             m, n = expr.children()
-            m = _resolve_box_var(m, binders)
-            n = _resolve_box_var(n, binders)
-            t = Const("t", context.BoxSort)
+            t = fresh_const(context.BoxSort, "table_higher", avoid=(expr, placed_block))
             tbl = context.get_consts("tbl")
             return Or(
                 And(m == placed_block, n == placed_block),
@@ -672,7 +611,7 @@ def rewrite_for_put_on_tbl_for_Higher(expr, placed_block, context, binders=None)
                 And(m != placed_block, m != tbl, n == placed_block, n != tbl),
             )
         new_children = [
-            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context, binders)
+            rewrite_for_put_on_tbl_for_Higher(c, placed_block, context)
             for c in expr.children()
         ]
         return decl(*new_children)
@@ -695,32 +634,27 @@ def rewrite_for_put_on_tbl_for_scattered(expr, placed_block, context):
     See ``rewrite_for_put_for_scattered`` for the put-on-block (non-tbl) case.
     """
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_on_tbl_for_scattered(
-            body, placed_block, context
-        )
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_on_tbl_for_scattered(
+                body, placed_block, context
+            ),
+            avoid=(placed_block,),
         )
 
     if is_app(expr):
         decl = expr.decl()
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Scattered":
             m, n = expr.children()
-            return Or(
+            effect = Or(
                 And(m == placed_block, n != placed_block),
                 And(m != placed_block, n == placed_block),
                 And(m != placed_block, n != placed_block, context.Scattered(m, n)),
             )
+            if context.use_tbl:
+                tbl = context.get_consts("tbl")
+                effect = And(m != tbl, n != tbl, effect)
+            return effect
         new_children = [
             rewrite_for_put_on_tbl_for_scattered(c, placed_block, context)
             for c in expr.children()
@@ -734,37 +668,15 @@ def _put_base_is_tbl(seq_instruction: Put) -> bool:
     return seq_instruction.base_block == "tbl"
 
 
-def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
-    """Rewrite every possible occurrence of alpha<higher> beta to
-    Or(alpha<higher>beta, And(alpha<higher>b_prime, b<higher>beta))
-    """
-    if binders is None:
-        binders = []
-
+def rewrite_for_put_for_higher(expr, b_prime, b, context):
+    """Rewrite Higher after placement on a block in the supported-height model."""
     # Case 1: Quantifier
     if is_quantifier(expr):
-        # Extract info about the quantifier
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-
-        # Extract and rewrite the body
-        body = expr.body()
-        rewritten_body = rewrite_for_put_for_higher(
-            body, b_prime, b, context, _push_quantifier_binders(expr, binders)
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_for_higher(body, b_prime, b, context),
+            avoid=(b_prime, b),
         )
-
-        # Rebuild the quantifier (keep same type)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        else:
-            return Exists(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
 
     # Case 2: Function application (And, Or, ON_star, etc.)
     elif is_app(expr):
@@ -773,18 +685,18 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
         # Match ON_star(a,b)
         if decl.kind() == Z3_OP_UNINTERPRETED and decl.name() == "Higher":
             m, n = expr.children()
-            m = _resolve_box_var(m, binders)
-            n = _resolve_box_var(n, binders)
-            t = Const("t", context.BoxSort)
+            t = fresh_const(context.BoxSort, "higher_below", avoid=(expr, b_prime, b))
             return Or(
                 And(m != b_prime, m != b, n != b_prime, n != b, context.Higher(m, n)),
                 And(
                     m != b_prime,
                     m != b,
                     n == b_prime,
-                    Exists(
-                        [t], And(t != n, context.Higher(n, t), context.Higher(t, b))
-                    ),
+                    # Exact support on a common L-spaced height grid makes
+                    # m >= b + L equivalent to m > b. Keep both relations:
+                    # abstract Higher need not be total and tbl is isolated.
+                    context.Higher(m, b),
+                    Not(context.Higher(b, m)),
                 ),
                 And(m != b_prime, m != b, n == b, context.Higher(m, n)),
                 And(m == b, n != b_prime, n != b, context.Higher(m, n)),
@@ -800,7 +712,12 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
                             And(
                                 context.Higher(n, b),
                                 Implies(
-                                    And(t != n, context.Higher(n, t)),
+                                    # Equal-height peers are not intermediate
+                                    # levels in the supported tower of n.
+                                    And(
+                                        context.Higher(n, t),
+                                        Not(context.Higher(t, n)),
+                                    ),
                                     context.Higher(b, t),
                                 ),
                             ),
@@ -813,8 +730,7 @@ def rewrite_for_put_for_higher(expr, b_prime, b, context, binders=None):
 
         # Otherwise rebuild recursively
         new_children = [
-            rewrite_for_put_for_higher(c, b_prime, b, context, binders)
-            for c in expr.children()
+            rewrite_for_put_for_higher(c, b_prime, b, context) for c in expr.children()
         ]
         return decl(*new_children)
 
@@ -830,19 +746,10 @@ def rewrite_for_put_for_scattered(expr, b_prime, b, context):
     b' on b redirects scattered-with-b' to scattered-with-b.
     """
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_put_for_scattered(body, b_prime, b, context)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_put_for_scattered(body, b_prime, b, context),
+            avoid=(b_prime, b),
         )
 
     if is_app(expr):
@@ -894,19 +801,10 @@ def rewrite_for_put_for_scattered(expr, b_prime, b, context):
 def rewrite_for_mark_goal(expr, target, context):
     """Rewrite every Mark(alpha) as Or(Mark(alpha), alpha == target)."""
     if is_quantifier(expr):
-        num_vars = expr.num_vars()
-        var_sorts = [expr.var_sort(i) for i in range(num_vars)]
-        var_names = [expr.var_name(i) for i in range(num_vars)]
-        body = expr.body()
-        rewritten_body = rewrite_for_mark_goal(body, target, context)
-        if expr.is_forall():
-            return ForAll(
-                list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-                rewritten_body,
-            )
-        return Exists(
-            list(map(lambda n_s: Const(n_s[0], n_s[1]), zip(var_names, var_sorts))),
-            rewritten_body,
+        return rewrite_quantifier(
+            expr,
+            lambda body: rewrite_for_mark_goal(body, target, context),
+            avoid=(target,),
         )
 
     if is_app(expr):
@@ -937,20 +835,56 @@ class Program:
         else:
             self.instructions = [Skip() for _ in range(self.length)]
 
-    def eval(self, env, return_img: bool = False):
+    def eval(
+        self,
+        env,
+        return_img: bool = False,
+        *,
+        on_loop_head=None,
+        on_state=None,
+        on_event=None,
+        initial_observation=None,
+        max_loop_iterations=None,
+    ):
         """evaluate the program in the environment and return the trajectories"""
-        traj = [env.reset()[0]]
+        from synthesis.api.runtime import execute_instruction
+
+        initial_obs = (
+            env.reset()[0] if initial_observation is None else initial_observation
+        )
+        if on_state is None:
+            traj = [initial_obs]
+        else:
+
+            class RecordedTrajectory(list):
+                def append(self, observation):
+                    super().append(observation)
+                    on_state(observation)
+
+            traj = RecordedTrajectory()
+            traj.append(initial_obs)
         if return_img:
             imgs = [env.render()]
-        for line in self.instructions:
-            line_imgs = line.eval(env, traj, return_img)
+        for index, line in enumerate(self.instructions):
+            line_imgs = execute_instruction(
+                line,
+                env,
+                traj,
+                path=str(index),
+                return_image=return_img,
+                on_loop_head=on_loop_head,
+                on_event=on_event,
+                max_loop_iterations=max_loop_iterations,
+            )
             if return_img:
                 imgs.extend(line_imgs)
         if return_img:
             return traj, imgs
         return traj
 
-    def eval_from_observation(self, env, initial_obs, return_img: bool = False):
+    def eval_from_observation(
+        self, env, initial_obs, return_img: bool = False, *, on_loop_head=None
+    ):
         """Evaluate the program starting from ``initial_obs`` instead of reset."""
         inner = getattr(env, "env", env)
         if not hasattr(inner, "set_state_from_observation"):
@@ -962,8 +896,11 @@ class Program:
         traj = [initial_obs.copy()]
         if return_img:
             imgs = [env.render()]
-        for line in self.instructions:
-            line_imgs = line.eval(env, traj, return_img)
+        for index, line in enumerate(self.instructions):
+            kwargs = {}
+            if on_loop_head is not None and isinstance(line, While):
+                kwargs = dict(on_loop_head=on_loop_head, loop_id=str(index))
+            line_imgs = line.eval(env, traj, return_img, **kwargs)
             if return_img:
                 imgs.extend(line_imgs)
         if return_img:
@@ -985,9 +922,53 @@ class Program:
         return "\n".join(["begin", *instruction_str, "end"])
 
     def VC_gen(self, P, Q, context):
-        # P, Q are z3 formula
-        seq_instruction = to_seq(self.instructions)
-        return [Implies(P, self.wp(Q, context))] + VC_aux(seq_instruction, Q, context)
+        from synthesis.verification_lib.symbolic_verify import VC
+
+        def collect(instructions, post, prefix=""):
+            result = []
+            for index in reversed(range(len(instructions))):
+                instruction = instructions[index]
+                path = f"{prefix}.{index}" if prefix else str(index)
+                if isinstance(instruction, While):
+                    invariant = And(
+                        *self._invariant_condition_exprs(instruction.invariant)
+                    )
+                    # The witness is free in the preservation VC: validity must
+                    # hold for every guard-satisfying binding, and a refutation
+                    # may choose any unsafe one. Exit negates the whole existential.
+                    result[0:0] = collect(instruction.body, invariant, path) + [
+                        VC(
+                            "preserve",
+                            path,
+                            Implies(
+                                And(instruction.instantiated_cond, invariant),
+                                wp(to_seq(instruction.body), invariant, context),
+                            ),
+                        ),
+                        VC(
+                            "exit",
+                            path,
+                            Implies(And(Not(instruction.cond), invariant), post),
+                        ),
+                    ]
+                post = wp(instruction, post, context)
+            return result
+
+        first_loop = next(
+            (
+                str(i)
+                for i, inst in enumerate(self.instructions)
+                if isinstance(inst, While)
+            ),
+            None,
+        )
+        return [
+            VC(
+                "establish" if first_loop is not None else "body",
+                first_loop,
+                Implies(P, self.wp(Q, context)),
+            )
+        ] + collect(self.instructions, Q)
 
     def wp(self, Q, context):
         seq_instruction = to_seq(self.instructions)
@@ -1039,8 +1020,6 @@ class Program:
                 prov_clauses.extend(inst.invariant_provenance)
         setattr(solver, "_learned_clause_provenance", prov_clauses)
         vcs = self.VC_gen(P, Q, solver)
-        outer_md_var = _outer_while_direct_body_move_down_var(self.instructions)
-        ok = True
 
         img_dir: Optional[Path] = None
         ce_dir = counterexample_image_dir
@@ -1087,60 +1066,22 @@ class Program:
         #     save_goal_counterexample_on_failure("axioms_consistency", axiom_model)
         # print("=====================")
 
+        from synthesis.verification_lib.symbolic_verify import (
+            SymbolicVerificationResult,
+            discharge_vc,
+        )
+
+        checks = []
         print("total number of VCs:", len(vcs))
         for idx, vc in enumerate(vcs):
-            print(f"verifying VC {idx}", vc)
-            if is_implies(vc):
-                premise = vc.arg(0)
-                conclusion = vc.arg(1)
-                print("premise:", premise)
-                print("conclusion:", conclusion)
-                print("---------------------")
-                print("check 1: axioms + premise")
-                check1, model1 = solver.check_satisfiable(
-                    premise,
-                    visualize_model=True,
-                    viz_tag=f"vc_{idx}_check1",
-                )
-                if check1 != sat:
-                    ok = False
-                    print(f"[FAIL] VC {idx} check 1 returned {check1}; expected sat")
-                    save_goal_counterexample_on_failure(f"vc_{idx}_check1", model1)
-                print("---------------------")
-                print("check 2: axioms + premise + not(conclusion)")
-                check2, model2 = solver.check_satisfiable(
-                    And(premise, Not(conclusion)),
-                    visualize_model=True,
-                    viz_tag=f"vc_{idx}_check2",
-                )
-                if check2 != unsat:
-                    ok = False
-                    print(f"[FAIL] VC {idx} check 2 returned {check2}; expected unsat")
-                    if check2 == sat and model2 is not None:
-                        print_where_conclusion_fails(
-                            solver,
-                            model2,
-                            conclusion,
-                            outer_move_down_var=outer_md_var,
-                        )
-                    save_goal_counterexample_on_failure(f"vc_{idx}_check2", model2)
-            else:
-                print(
-                    "non-implication VC; using check 2 style: axioms + not(VC) should be unsat"
-                )
-                check, model_n = solver.check_satisfiable(
-                    Not(vc),
-                    visualize_model=True,
-                    viz_tag=f"vc_{idx}_not_vc",
-                )
-                if check != unsat:
-                    ok = False
-                    print(
-                        f"[FAIL] VC {idx} non-implication check returned {check}; expected unsat"
-                    )
-                    save_goal_counterexample_on_failure(f"vc_{idx}_not_vc", model_n)
-            print("=====================")
-        return ok
+            check = discharge_vc(vc, solver)
+            checks.append(check)
+            print(f"VC {idx} ({vc.kind}, loop={vc.loop_id}): {check.status}")
+            if check.model is not None:
+                save_goal_counterexample_on_failure(f"vc_{idx}_check2", check.model)
+                if visualize_enum_scene and solver.mode == "enum":
+                    solver._visualize_enum(check.model, viz_tag=f"vc_{idx}_check2")
+        return SymbolicVerificationResult(checks)
 
     @staticmethod
     def _invariant_condition_exprs(invariant):
@@ -1159,37 +1100,65 @@ class Program:
         sort_name: str = "Box",
         default_block_length: float = 0.05,
         constants: Union[List[str], None] = None,
+        use_tbl: Union[bool, None] = None,
+        *,
+        contracts=None,
+        noise=None,
+        timeout_ms=5000,
     ):
-        solver = (
-            context
-            if context is not None
-            else lowlevel_verification_lib.LowLevelContext(
-                sort_name=sort_name, default_L=default_block_length
-            )
+        """Check loop motion contracts; unsupported coverage cannot pass.
+
+        ``contracts`` maps instruction-path loop IDs to explicit MotionContracts.
+        Result truthiness preserves existing callers while exposing every failed
+        obligation, counterexample, and the selected noise mode.
+        """
+        from synthesis.verification_lib.motion_verification import (
+            MotionCheck,
+            MotionVerificationResult,
         )
-        ok = True
-        found_while = False
-        for idx, inst in enumerate(self.instructions):
-            if isinstance(inst, While):
-                found_while = True
-                print(
-                    f"starting low-level verification for while loop with index {idx}"
-                )
-                print(f"invariant: {inst.invariant}")
-                print(f"body: {inst.body}")
-                print(f"instantiated_cond: {inst.instantiated_cond}")
-                loop_ok = solver.start_verification(
-                    self._invariant_condition_exprs(inst.invariant)
-                    + [inst.instantiated_cond],
-                    inst.body,
+
+        constants = constants or []
+        contracts = contracts or {}
+        if use_tbl is None:
+            use_tbl = lowlevel_verification_lib.TABLE_CONST_NAME in constants
+        solver = context or lowlevel_verification_lib.LowLevelContext(
+            sort_name=sort_name,
+            default_L=default_block_length,
+            use_tbl=use_tbl,
+        )
+        result = MotionVerificationResult([], noise)
+        for index, instruction in enumerate(self.instructions):
+            if isinstance(instruction, While):
+                loop_result = solver.start_verification(
+                    self._invariant_condition_exprs(instruction.invariant)
+                    + [instruction.instantiated_cond],
+                    instruction.body,
                     constants=constants,
+                    contract=contracts.get(str(index)),
+                    noise=noise,
+                    block_v=str(index),
+                    timeout_ms=timeout_ms,
                 )
-                if not loop_ok:
-                    ok = False
-                    print(f"[FAIL] low-level verification failed for while index {idx}")
-        if not found_while:
-            print("[WARN] low-level verification found no while loops to check")
-        return ok
+                result.checks.extend(loop_result.checks)
+                result.checked_blocks += loop_result.checked_blocks
+                result.elapsed_seconds += loop_result.elapsed_seconds
+            elif not isinstance(
+                instruction, lowlevel_verification_lib.INERT_MOTION_INSTRUCTIONS
+            ):
+                result.checks.append(
+                    MotionCheck(
+                        f"instruction_{index}",
+                        "unsupported",
+                        reason="Straight-line motion requires its own entry condition",
+                    )
+                )
+        if result.checked_blocks == 0:
+            result.checks.append(
+                MotionCheck(
+                    "coverage", "unsupported", reason="No motion blocks checked"
+                )
+            )
+        return result
 
 
 _PICK_MOVE_RELEASE = (Pick, Move, Release)
@@ -1257,8 +1226,8 @@ def wp(seq_instruction, Q, context):
 
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
-        if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
-            return And(*[c.expr for c in inv])
+        if isinstance(inv, list):
+            return And(*[c.expr if hasattr(c, "expr") else c for c in inv])
         return inv
 
     if isinstance(seq_instruction, Skip):
@@ -1267,6 +1236,15 @@ def wp(seq_instruction, Q, context):
         return wp(seq_instruction.s1, wp(seq_instruction.s2, Q, context), context)
     elif isinstance(seq_instruction, While):
         return inv_expr(seq_instruction.invariant)
+    elif isinstance(seq_instruction, Get):
+        variables = [
+            context.get_consts(str(v)) for v in seq_instruction.guard_exists_vars
+        ]
+        condition = seq_instruction.instantiated_cond
+        # A runtime Get without a witness raises: total execution requires existence.
+        return And(
+            Exists(variables, condition), ForAll(variables, Implies(condition, Q))
+        )
     elif isinstance(seq_instruction, Assign):
         return substitute(
             Q,
@@ -1288,14 +1266,14 @@ def wp(seq_instruction, Q, context):
         return rewrite_for_mark_goal(Q, target, context)
     elif isinstance(seq_instruction, MoveRight):
         curr = context.get_goal_consts(seq_instruction.var_name)
-        z = Const(f"z_r_{seq_instruction.var_name}", context.GoalSort)
+        z = fresh_const(context.GoalSort, "move_right", avoid=(Q, curr, context.null))
         return And(
             curr != context.null,
             ForAll([z], Implies(context.rtot(curr, z), substitute(Q, (curr, z)))),
         )
     elif isinstance(seq_instruction, MoveDown):
         curr = context.get_goal_consts(seq_instruction.var_name)
-        z = Const(f"z_d_{seq_instruction.var_name}", context.GoalSort)
+        z = fresh_const(context.GoalSort, "move_down", avoid=(Q, curr, context.null))
         return And(
             curr != context.null,
             ForAll([z], Implies(context.dtot(curr, z), substitute(Q, (curr, z)))),
@@ -1332,8 +1310,8 @@ def VC_aux(seq_instruction, Q, context) -> List:
 
     def inv_expr(inv):
         # Invariant may be a Z3 expr or a list of ProvenancedClause-like objects.
-        if isinstance(inv, list) and inv and hasattr(inv[0], "expr"):
-            return And(*[c.expr for c in inv])
+        if isinstance(inv, list):
+            return And(*[c.expr if hasattr(c, "expr") else c for c in inv])
         return inv
 
     if isinstance(seq_instruction, Seq):
@@ -1364,10 +1342,12 @@ def VC_aux(seq_instruction, Q, context) -> List:
     assert False, "Unrecognized seq instruction for VC_aux"
 
 
-def run_stack_example_with_only_ON_star():
+def run_stack_example_with_only_ON_star(demo_store, loop_id="1"):
     context = highlevel_verification_lib.HighLevelContext(mode="declare")
-    inferred_invariant, candidate_lists = (
-        synthesis.inference_lib.inference.run_proposal_example(context=context)
+    from synthesis.inference_lib.demo_store import InvInference, tower_vocabulary
+
+    inferred_invariant, candidate_lists = InvInference(
+        demo_store, loop_id, tower_vocabulary("stack"), context
     )
     b_prime, b, n, b0, a = Consts("b_prime b n b0 a", context.BoxSort)
     instructions = [

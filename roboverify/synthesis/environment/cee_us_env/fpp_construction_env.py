@@ -12,7 +12,27 @@ import synthesis.environment.cee_us_env.torch_helpers as torch_helpers
 from synthesis.environment.cee_us_env.abstract_environments import MaskedGoalSpaceEnvironmentInterface
 from synthesis.environment.cee_us_env.fpp_construction.construction import FetchBlockConstructionEnv
 from synthesis.environment.cee_us_env.robotics import GymRoboticsGroundTruthSupportEnv
+from synthesis.environment.stack_reset import sample_stack_xy
+from synthesis.util.actions import bound_delta_action
 from synthesis.util.on import BLOCK_LENGTH, on as on_relation
+
+ROBOVERIFY_PYRAMID_NUM_BLOCKS = 6
+ROBOVERIFY_PYRAMID_LAYER_SIZES = (3, 2, 1)
+
+ROBOVERIFY_GRID_WORKSPACE_X_OFFSET = 0.0
+ROBOVERIFY_GRID_BASE_Y_CLEARANCE = 0.08
+ROBOVERIFY_GRID_BLOCK_Y_OFFSET = 0.22
+ROBOVERIFY_GRID_GOAL_Y_OFFSET = 0.10
+ROBOVERIFY_GRID_BLOCK_Y_HALF_RANGE = 0.12
+ROBOVERIFY_GRID_MIN_X_AHEAD_OF_BASE = 0.35
+GRIPPER_XY_CLEARANCE = 0.10
+
+ROBOVERIFY_CASES = (
+    "RoboVerifyStack",
+    "RoboVerifyUnstack",
+    "RoboVerifyReverse",
+    "RoboVerifyPartialStack",
+)
 
 import pdb
 
@@ -38,14 +58,19 @@ class FetchPickAndPlaceConstruction(
         FetchBlockConstructionEnv.__init__(self, **kwargs)
         GymRoboticsGroundTruthSupportEnv.__init__(self, name=name, **kwargs)
 
-        if self.case == "RoboVerifyStack":
+        if self.case in ROBOVERIFY_CASES:
+            # table0 is a horizontal plane; its world z is the physical surface,
+            # unlike height_offset, which is the resting block-center height.
+            # Keep this motion-level fact separate from observation packing and
+            # the relational tbl marker, which has no coordinates.
+            self.table_surface_height = float(self.sim.data.get_geom_xpos("table0")[2])
             if base_block_id is None:
-                raise ValueError("RoboVerifyStack requires base_block_id.")
+                raise ValueError(f"{self.case} requires base_block_id.")
             if not isinstance(base_block_id, int):
-                raise TypeError("base_block_id must be an int for RoboVerifyStack.")
+                raise TypeError(f"base_block_id must be an int for {self.case}.")
             if not (0 <= base_block_id < self.num_blocks):
                 raise ValueError(
-                    f"base_block_id must be in [0, {self.num_blocks - 1}] for RoboVerifyStack; got {base_block_id}"
+                    f"base_block_id must be in [0, {self.num_blocks - 1}] for {self.case}; got {base_block_id}"
                 )
             self.roboverify_base_block_id = int(base_block_id)
             # Mapping used by PickPlaceByName and program execution.
@@ -96,7 +121,13 @@ class FetchPickAndPlaceConstruction(
         self.observation_space_size_preproc = self.obs_preproc(self.flatten_observation(self._get_obs())).shape[0]
         self.goal_space_size = goal_space_size  # Should we equal to num_objects * 3 + 3 for the gripper pos!
 
-        if "tower" in self.case or self.case == "Pyramid" or self.case == "RoboVerifyStack":
+        if (
+            "tower" in self.case
+            or self.case == "Pyramid"
+            or self.case in ROBOVERIFY_CASES
+            or self.case == "RoboVerifyGrid"
+            or self.case == "RoboVerifyPyramid"
+        ):
             self.threshold = 0.02
         elif self.case == "PickAndPlace":
             self.threshold = 0.025
@@ -206,7 +237,7 @@ class FetchPickAndPlaceConstruction(
         return np.concatenate((obs["observation"], obs["desired_goal"]))
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        action = bound_delta_action(action)
         self._set_action(action)
         try:
             self.sim.step()
@@ -248,6 +279,11 @@ class FetchPickAndPlaceConstruction(
             "PickAndPlace",
             "Flip",
             "RoboVerifyStack",
+            "RoboVerifyUnstack",
+            "RoboVerifyReverse",
+            "RoboVerifyPartialStack",
+            "RoboVerifyGrid",
+            "RoboVerifyPyramid",
         ]
         if self.case == "All":
             case_id = np.random.randint(0, len(cases))
@@ -256,6 +292,11 @@ class FetchPickAndPlaceConstruction(
             case = self.case
         else:
             raise NotImplementedError
+
+        if case == "RoboVerifyGrid":
+            return self._roboverify_grid_goals_flat().copy()
+        if case == "RoboVerifyPyramid":
+            return self._roboverify_pyramid_goals_flat().copy()
 
         goals = []
         objs = []
@@ -368,10 +409,10 @@ class FetchPickAndPlaceConstruction(
                 goals[-1],
                 goals[0],
             )  # Switch first and last obj xy (last object should be lifted!)
-        elif case == "RoboVerifyStack":
-            # RoboVerifyStack success/reward ignores the sampled goal; it checks tower
-            # completion relative to `base_block_id`. Use the default goal sampler to
-            # ensure correct shape without introducing extra constraints here.
+        elif case in ROBOVERIFY_CASES:
+            # RoboVerify success/reward ignores the sampled goal; it checks layout
+            # from achieved object positions. Use the default goal sampler to ensure
+            # correct shape without introducing extra constraints here.
             return self._sample_goal()
         else:
             return self._sample_goal()
@@ -380,52 +421,392 @@ class FetchPickAndPlaceConstruction(
         return np.concatenate(goals, axis=0).copy()
 
     def _reset_sim(self):
+        if self.case == "RoboVerifyStack":
+            return self._reset_sim_roboverify_stack()
+        if self.case == "RoboVerifyPartialStack":
+            return self._reset_sim_roboverify_partial_stack()
+        if self.case == "RoboVerifyGrid":
+            return self._reset_sim_roboverify_grid()
+        if self.case == "RoboVerifyPyramid":
+            return self._reset_sim_roboverify_pyramid()
+        if self.case in ("RoboVerifyUnstack", "RoboVerifyReverse"):
+            return self._reset_sim_roboverify_tower()
+        return super()._reset_sim()
+
+    def _reset_sim_roboverify_stack(self):
         """
         RoboVerifyStack init:
-        - Randomize all blocks on the tabletop.
+        - Randomize all blocks on the tabletop within 0.70 m XY of the robot base.
         - Enforce pairwise "scattered" separation in XY for every block pair.
         """
-        if self.case != "RoboVerifyStack":
-            return super()._reset_sim()
+        self.sim.set_state(self.initial_state)
+        positions = sample_stack_xy(
+            self.num_blocks, self.robot_base_xy, self.initial_gripper_xpos[:2]
+        )
+        for obj_name, object_xypos in zip(self.object_names, positions):
+            object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
+            assert object_qpos.shape == (7,)
+            object_qpos[:2] = object_xypos
+            object_qpos[2] = self.height_offset
+            self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
+        self.sim.forward()
+        return True
+
+    def _reset_sim_roboverify_tower(self):
+        """
+        RoboVerifyUnstack / RoboVerifyReverse init:
+        - Place all blocks in a single tower with `base_block_id` (b0) at the bottom.
+        """
+        self.sim.set_state(self.initial_state)
+
+        base_id = self.roboverify_base_block_id
+        tower_order = self._roboverify_canonical_tower_order()
+        block_height = BLOCK_LENGTH
+
+        while True:
+            tower_xy = self.initial_gripper_xpos[:2] + np.random.uniform(
+                -self.obj_range, self.obj_range, size=2
+            )
+            if np.linalg.norm(tower_xy - self.initial_gripper_xpos[:2]) >= 0.1:
+                break
+
+        for level, block_id in enumerate(tower_order):
+            obj_name = self.object_names[block_id]
+            object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
+            assert object_qpos.shape == (7,)
+            object_qpos[:2] = tower_xy
+            object_qpos[2] = self.height_offset + level * block_height
+            self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
+
+        self.sim.forward()
+        return True
+
+    def _roboverify_random_tower_partition(self, num_towers: int) -> list[list[int]]:
+        if num_towers < 2:
+            raise ValueError("partial stack requires at least two towers.")
+        if num_towers > self.num_blocks:
+            raise ValueError("cannot have more towers than blocks.")
+
+        order = np.random.permutation(self.num_blocks)
+        split_points = sorted(
+            np.random.choice(np.arange(1, self.num_blocks), size=num_towers - 1, replace=False)
+        )
+        towers: list[list[int]] = []
+        prev = 0
+        for split in split_points:
+            towers.append(order[prev:split].tolist())
+            prev = int(split)
+        towers.append(order[prev:].tolist())
+        return towers
+
+    def _roboverify_order_partial_tower_blocks(self, blocks: list[int]) -> list[int]:
+        """Allow ``b0`` to appear in the middle of a multi-block tower when possible."""
+        base_id = self.roboverify_base_block_id
+        ordered = list(blocks)
+        if base_id not in ordered or len(ordered) < 3:
+            return ordered
+
+        internal_positions = list(range(1, len(ordered) - 1))
+        pos = int(np.random.choice(internal_positions))
+        ordered.remove(base_id)
+        ordered.insert(pos, base_id)
+        return ordered
+
+    def _sample_scattered_tower_xy_positions(self, num_towers: int) -> list[np.ndarray]:
+        scattered_sep = 2.0 * BLOCK_LENGTH
+        tower_xypos: list[np.ndarray] = []
+
+        while len(tower_xypos) < num_towers:
+            candidate = self.initial_gripper_xpos[:2] + np.random.uniform(
+                -self.obj_range, self.obj_range, size=2
+            )
+            if np.linalg.norm(candidate - self.initial_gripper_xpos[:2]) < 0.1:
+                continue
+
+            ok = True
+            for other_xypos in tower_xypos:
+                dx = abs(candidate[0] - other_xypos[0])
+                dy = abs(candidate[1] - other_xypos[1])
+                if not (dx >= scattered_sep or dy >= scattered_sep):
+                    ok = False
+                    break
+
+            if ok:
+                tower_xypos.append(candidate)
+
+        return tower_xypos
+
+    def _reset_sim_roboverify_partial_stack(self):
+        """
+        RoboVerifyPartialStack init:
+        - Partition blocks into at least two partial towers (height >= 1 each).
+        - ``b0`` may appear in the middle of a multi-block tower.
+        """
+        if self.num_blocks < 2:
+            raise ValueError("RoboVerifyPartialStack requires at least two blocks.")
 
         self.sim.set_state(self.initial_state)
 
-        scattered_sep = 2.0 * BLOCK_LENGTH  # Must be large enough for lowlevel_scattered(m,n)
-        prev_obj_xypos = []
+        num_towers = int(np.random.randint(2, self.num_blocks + 1))
+        towers = self._roboverify_random_tower_partition(num_towers)
+        tower_xypos = self._sample_scattered_tower_xy_positions(len(towers))
+        block_height = BLOCK_LENGTH
 
-        # Sample per-object XY independently and reject until all pairs satisfy scattered.
-        for obj_name in self.object_names:
-            while True:
-                object_xypos = self.initial_gripper_xpos[:2] + np.random.uniform(
-                    -self.obj_range, self.obj_range, size=2
-                )
+        for tower_blocks, tower_xy in zip(towers, tower_xypos):
+            if self.roboverify_base_block_id in tower_blocks:
+                tower_blocks = self._roboverify_order_partial_tower_blocks(tower_blocks)
 
-                # Keep the same "not too close to gripper" constraint used in the base env.
-                if np.linalg.norm(object_xypos - self.initial_gripper_xpos[:2]) < 0.1:
-                    continue
-
-                ok = True
-                for other_xypos in prev_obj_xypos:
-                    dx = abs(object_xypos[0] - other_xypos[0])
-                    dy = abs(object_xypos[1] - other_xypos[1])
-                    if not (dx >= scattered_sep or dy >= scattered_sep):
-                        ok = False
-                        break
-
-                if not ok:
-                    continue
-
+            for level, block_id in enumerate(tower_blocks):
+                obj_name = self.object_names[block_id]
                 object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
                 assert object_qpos.shape == (7,)
-                object_qpos[:2] = object_xypos
-                object_qpos[2] = self.height_offset
+                object_qpos[:2] = tower_xy
+                object_qpos[2] = self.height_offset + level * block_height
                 self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
-                self.sim.forward()
 
-                prev_obj_xypos.append(object_xypos)
-                break
-
+        self.sim.forward()
         return True
+
+    def _roboverify_grid_block_accept(self, candidate: np.ndarray) -> bool:
+        base_x, base_y = self.robot_base_xy
+        if np.linalg.norm(candidate - self.initial_gripper_xpos[:2]) < GRIPPER_XY_CLEARANCE:
+            return False
+        if candidate[1] >= base_y - ROBOVERIFY_GRID_BASE_Y_CLEARANCE:
+            return False
+        if candidate[0] < base_x + ROBOVERIFY_GRID_MIN_X_AHEAD_OF_BASE:
+            return False
+        return True
+
+    def _roboverify_random_scattered_layout(
+        self,
+        count: int,
+        center_xy: np.ndarray,
+        *,
+        x_half_range: float,
+        y_half_range: float,
+        max_attempts: int = 200,
+        layout_retries: int = 20,
+        accept_candidate=None,
+    ) -> list[np.ndarray]:
+        """Randomly scatter blocks in a rectangular region with pairwise separation."""
+        scattered_sep = 2.0 * BLOCK_LENGTH
+        center_xy = np.asarray(center_xy, dtype=np.float32)
+
+        for _ in range(layout_retries):
+            positions: list[np.ndarray] = []
+            for _ in range(count):
+                for _ in range(max_attempts):
+                    candidate = center_xy + np.random.uniform(
+                        [-x_half_range, -y_half_range],
+                        [x_half_range, y_half_range],
+                        size=2,
+                    ).astype(np.float32)
+                    if accept_candidate is not None and not accept_candidate(candidate):
+                        continue
+                    elif accept_candidate is None:
+                        if np.linalg.norm(candidate - self.initial_gripper_xpos[:2]) < GRIPPER_XY_CLEARANCE:
+                            continue
+                    if all(
+                        abs(candidate[0] - other[0]) >= scattered_sep
+                        or abs(candidate[1] - other[1]) >= scattered_sep
+                        for other in positions
+                    ):
+                        positions.append(candidate)
+                        break
+                else:
+                    break
+            else:
+                return positions
+
+        fallback = self._roboverify_deterministic_scattered_layout(
+            count,
+            center_xy,
+            cols=max(2, int(np.ceil(np.sqrt(count)))),
+            jitter=0.03,
+        )
+        order = np.random.permutation(count)
+        return [fallback[int(i)] for i in order]
+
+    def _roboverify_deterministic_scattered_layout(
+        self,
+        count: int,
+        center_xy: np.ndarray,
+        *,
+        cols: int | None = None,
+        sep: float | None = None,
+        jitter: float = 0.0,
+    ) -> list[np.ndarray]:
+        """Place ``count`` XY positions on a scattered grid without rejection sampling."""
+        sep = float(2.0 * BLOCK_LENGTH if sep is None else sep)
+        if cols is None:
+            cols = int(np.ceil(np.sqrt(count)))
+        rows = int(np.ceil(count / cols))
+        width = (cols - 1) * sep
+        height = (rows - 1) * sep
+        origin = np.asarray(center_xy, dtype=np.float32) - np.array(
+            [0.5 * width, 0.5 * height], dtype=np.float32
+        )
+
+        positions: list[np.ndarray] = []
+        for index in range(count):
+            row, col = divmod(index, cols)
+            xy = origin + np.array([col * sep, row * sep], dtype=np.float32)
+            if jitter > 0.0:
+                xy += np.random.uniform(-jitter, jitter, size=2).astype(np.float32)
+            positions.append(xy)
+        return positions
+
+    def _roboverify_grid_goal_origin_xy(self) -> np.ndarray:
+        spacing = self._roboverify_grid_cell_spacing()
+        grid_width = max(0, self.grid_cols - 1) * spacing
+        workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+        return np.array(
+            [
+                workspace_x - 0.5 * grid_width,
+                self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET,
+            ],
+            dtype=np.float32,
+        )
+
+    def _roboverify_grid_block_center_xy(self) -> np.ndarray:
+        workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+        return np.array(
+            [
+                workspace_x,
+                self.robot_base_xy[1] - ROBOVERIFY_GRID_BLOCK_Y_OFFSET,
+            ],
+            dtype=np.float32,
+        )
+
+    def _roboverify_pyramid_goal_origin_xy(self) -> np.ndarray:
+        row_spacing = self._roboverify_pyramid_row_spacing()
+        base_width = (ROBOVERIFY_PYRAMID_LAYER_SIZES[0] - 1) * row_spacing
+        workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+        return np.array(
+            [
+                workspace_x - 0.5 * base_width,
+                self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET,
+            ],
+            dtype=np.float32,
+        )
+
+    def _roboverify_layout_cell_spacing(self) -> float:
+        # Adjacent goal centers are one block length plus a 0.3-block-length gap.
+        return BLOCK_LENGTH + 0.3 * BLOCK_LENGTH
+
+    def _roboverify_pyramid_row_spacing(self) -> float:
+        return self._roboverify_layout_cell_spacing()
+
+    def _roboverify_pyramid_goal_positions(self) -> np.ndarray:
+        row_spacing = self._roboverify_pyramid_row_spacing()
+        origin_x, origin_y = self._roboverify_pyramid_goal_origin_xy()
+        base_width = (ROBOVERIFY_PYRAMID_LAYER_SIZES[0] - 1) * row_spacing
+        goals = np.zeros((self.num_blocks, 3), dtype=np.float32)
+        block_id = 0
+        for layer_idx, layer_size in enumerate(ROBOVERIFY_PYRAMID_LAYER_SIZES):
+            z = self.height_offset + layer_idx * BLOCK_LENGTH
+            layer_width = (layer_size - 1) * row_spacing
+            start_x = float(origin_x) + 0.5 * (base_width - layer_width)
+            for col in range(layer_size):
+                goals[block_id] = [start_x + col * row_spacing, float(origin_y), z]
+                block_id += 1
+        return goals
+
+    def _roboverify_pyramid_goals_flat(self) -> np.ndarray:
+        goals = self._roboverify_pyramid_goal_positions()
+        return np.concatenate([goals.reshape(-1), np.zeros(3, dtype=np.float32)])
+
+    def _roboverify_grid_cell_spacing(self) -> float:
+        return self._roboverify_layout_cell_spacing()
+
+    def _roboverify_grid_goal_positions(self) -> np.ndarray:
+        spacing = self._roboverify_grid_cell_spacing()
+        goal_origin = self._roboverify_grid_goal_origin_xy()
+        origin_x = float(goal_origin[0])
+        origin_y = float(goal_origin[1])
+        goals = np.zeros((self.num_blocks, 3), dtype=np.float32)
+        for block_id in range(self.num_blocks):
+            row = block_id // self.grid_cols
+            col = block_id % self.grid_cols
+            goals[block_id] = [
+                origin_x + col * spacing,
+                origin_y + row * spacing,
+                self.height_offset,
+            ]
+        return goals
+
+    def _roboverify_grid_goals_flat(self) -> np.ndarray:
+        goals = self._roboverify_grid_goal_positions()
+        return np.concatenate([goals.reshape(-1), np.zeros(3, dtype=np.float32)])
+
+    def _roboverify_goal_layout_complete(
+        self, achieved_goal: np.ndarray, desired_goal: np.ndarray
+    ) -> bool:
+        achieved_goal = np.asarray(achieved_goal, dtype=np.float32)
+        desired_goal = np.asarray(desired_goal, dtype=np.float32)
+        dists = self.subgoal_distances(achieved_goal, desired_goal)
+        return all(float(d) <= float(self.threshold) for d in dists)
+
+    def _reset_sim_roboverify_workspace_blocks(self) -> None:
+        """Scatter blocks to the left of the robot base in the shared workspace."""
+        left_positions = self._roboverify_random_scattered_layout(
+            self.num_blocks,
+            self._roboverify_grid_block_center_xy(),
+            x_half_range=self.obj_range,
+            y_half_range=ROBOVERIFY_GRID_BLOCK_Y_HALF_RANGE,
+            accept_candidate=self._roboverify_grid_block_accept,
+        )
+        for obj_name, object_xypos in zip(self.object_names, left_positions):
+            object_qpos = self.sim.data.get_joint_qpos(f"{obj_name}:joint")
+            assert object_qpos.shape == (7,)
+            object_qpos[:2] = object_xypos
+            object_qpos[2] = self.height_offset
+            self.sim.data.set_joint_qpos(f"{obj_name}:joint", object_qpos)
+
+    def _reset_sim_roboverify_grid(self):
+        """
+        RoboVerifyGrid init:
+        - Scatter blocks to the left of the robot base (lower Y), in the workspace
+          in front of the base.
+        - Place the goal grid to the right of the robot base (higher Y), also in front.
+        """
+        self.sim.set_state(self.initial_state)
+
+        self.roboverify_grid_origin_xy = self._roboverify_grid_goal_origin_xy()
+        self.roboverify_goal_marker_positions = self._roboverify_grid_goal_positions()
+        self._reset_sim_roboverify_workspace_blocks()
+        self._update_roboverify_goal_markers()
+        return True
+
+    def _reset_sim_roboverify_pyramid(self):
+        """
+        RoboVerifyPyramid init:
+        - Scatter six blocks on the left of the robot base.
+        - Show a 3+2+1 pyramid goal marker layout on the right of the robot base.
+        """
+        self.sim.set_state(self.initial_state)
+
+        self.roboverify_goal_marker_positions = self._roboverify_pyramid_goal_positions()
+        self._reset_sim_roboverify_workspace_blocks()
+        self._update_roboverify_goal_markers()
+        return True
+
+    def _update_roboverify_goal_markers(self):
+        """Move brown goal-marker mocap bodies to the target layout."""
+        if not hasattr(self, "roboverify_goal_marker_positions"):
+            return
+        for i in range(self.num_blocks):
+            body_id = self.sim.model.body_name2id(f"grid_marker{i}")
+            mocap_id = self.sim.model.body_mocapid[body_id]
+            self.sim.data.mocap_pos[mocap_id] = self.roboverify_goal_marker_positions[i]
+            self.sim.data.mocap_quat[mocap_id] = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        self.sim.forward()
+
+    def _update_roboverify_grid_markers(self):
+        self._update_roboverify_goal_markers()
+
+    def _roboverify_grid_complete(self, achieved_goal: np.ndarray, desired_goal: np.ndarray) -> bool:
+        return self._roboverify_goal_layout_complete(achieved_goal, desired_goal)
 
     def reset(self):
         # Attempt to reset the simulator.
@@ -448,6 +829,10 @@ class FetchPickAndPlaceConstruction(
         super().set_GT_state(mj_state)
 
     def set_state_from_observation(self, observation):
+        """Compatibility alias for approximate visualization, not segment reset."""
+        return self.set_observation_for_visualization(observation)
+
+    def set_observation_for_visualization(self, observation):
         # This is a dummy function to only visualize the object dynamics!
         mj_state = np.zeros_like(np.concatenate((super().get_GT_state(), self.goal)))
         mj_state[-self.goal_space_size :] = observation[-self.goal_space_size :].copy()
@@ -747,6 +1132,67 @@ class FetchPickAndPlaceConstruction(
             raise NotImplementedError
         return cost
 
+    def _roboverify_canonical_tower_order(self) -> list[int]:
+        base_id = self.roboverify_base_block_id
+        if base_id is None:
+            raise ValueError("roboverify_base_block_id must be set.")
+        return [base_id] + [i for i in range(self.num_blocks) if i != base_id]
+
+    def _roboverify_tower_order_from_positions(self, positions: np.ndarray) -> list[int] | None:
+        """Return bottom-to-top block indices if ``positions`` form a single tower."""
+        positions = np.asarray(positions, dtype=np.float32)
+        if positions.shape != (self.num_blocks, 3):
+            positions = positions.reshape(self.num_blocks, 3)
+
+        table_epsilon = float(self.threshold)
+        bottom_candidates = []
+        for block_id in range(self.num_blocks):
+            if abs(float(positions[block_id, 2]) - float(self.height_offset)) > table_epsilon:
+                continue
+            if any(
+                other_id != block_id and on_relation(positions[block_id], positions[other_id])
+                for other_id in range(self.num_blocks)
+            ):
+                continue
+            bottom_candidates.append(block_id)
+
+        if len(bottom_candidates) != 1:
+            return None
+
+        order = [bottom_candidates[0]]
+        remaining = set(range(self.num_blocks)) - set(order)
+        current = order[0]
+
+        while remaining:
+            candidates = [
+                block_id
+                for block_id in remaining
+                if on_relation(positions[block_id], positions[current])
+            ]
+            if len(candidates) != 1:
+                return None
+            current = candidates[0]
+            order.append(current)
+            remaining.remove(current)
+
+        return order
+
+    def _roboverify_reverse_tower_complete(self, positions: np.ndarray) -> bool:
+        """
+        Check whether blocks form a tower in the reverse of the canonical init order.
+
+        Init order (bottom to top): ``[b0, ...]`` from
+        :meth:`_roboverify_canonical_tower_order`. Success requires the same
+        single-tower layout with block order reversed.
+        """
+        if self.roboverify_base_block_id is None:
+            raise ValueError("roboverify_base_block_id must be set for RoboVerifyReverse.")
+
+        order = self._roboverify_tower_order_from_positions(positions)
+        if order is None:
+            return False
+        return order == list(reversed(self._roboverify_canonical_tower_order()))
+
     def _roboverify_stack_tower_complete(self, positions: np.ndarray) -> bool:
         """
         Check whether blocks form a single tower above `base_block_id`.
@@ -783,8 +1229,54 @@ class FetchPickAndPlaceConstruction(
 
         return True
 
+    def _roboverify_unstack_all_on_ground(self, positions: np.ndarray) -> bool:
+        """
+        Check whether every block rests on the tabletop with no block on another.
+
+        Success:
+        1. each block's z is approximately `self.height_offset`
+        2. for all i != j, block i is not on block j
+        """
+        base_id = self.roboverify_base_block_id
+        if base_id is None:
+            raise ValueError("roboverify_base_block_id must be set for RoboVerifyUnstack.")
+
+        positions = np.asarray(positions, dtype=np.float32)
+        if positions.shape != (self.num_blocks, 3):
+            positions = positions.reshape(self.num_blocks, 3)
+
+        table_epsilon = float(self.threshold)
+        for i in range(self.num_blocks):
+            if abs(float(positions[i, 2]) - float(self.height_offset)) > table_epsilon:
+                return False
+
+        for i in range(self.num_blocks):
+            for j in range(self.num_blocks):
+                if i != j and on_relation(positions[i], positions[j]):
+                    return False
+
+        return True
+
+    def _roboverify_task_complete(self, positions: np.ndarray) -> bool:
+        if self.case in ("RoboVerifyStack", "RoboVerifyPartialStack"):
+            return self._roboverify_stack_tower_complete(positions)
+        if self.case == "RoboVerifyUnstack":
+            return self._roboverify_unstack_all_on_ground(positions)
+        if self.case == "RoboVerifyReverse":
+            return self._roboverify_reverse_tower_complete(positions)
+        raise ValueError(f"unsupported RoboVerify case: {self.case}")
+
     def compute_reward(self, obs):
-        if self.case != "RoboVerifyStack":
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+            achieved_goal = obs["achieved_goal"]
+            desired_goal = obs["desired_goal"]
+            return (
+                1.0
+                if self._roboverify_goal_layout_complete(achieved_goal, desired_goal)
+                else 0.0
+            )
+
+        if self.case not in ROBOVERIFY_CASES:
             return super().compute_reward(obs)
 
         achieved_goal = obs["achieved_goal"]
@@ -792,10 +1284,15 @@ class FetchPickAndPlaceConstruction(
         # achieved_goal layout: [obj0(x,y,z), ..., objN-1(x,y,z), grip(x,y,z)]
         block_positions = achieved_goal[:-3].reshape(self.num_blocks, 3)
 
-        return 1.0 if self._roboverify_stack_tower_complete(block_positions) else 0.0
+        return 1.0 if self._roboverify_task_complete(block_positions) else 0.0
 
     def _is_success(self, obs):
-        if self.case != "RoboVerifyStack":
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+            achieved_goal = self.achieved_goal_from_observation(obs)
+            desired_goal = self.goal_from_observation(obs)
+            return self._roboverify_goal_layout_complete(achieved_goal, desired_goal)
+
+        if self.case not in ROBOVERIFY_CASES:
             success_of_blocks = self.eval_success(obs)
             return success_of_blocks == self.num_blocks
 
@@ -804,7 +1301,7 @@ class FetchPickAndPlaceConstruction(
 
         if achieved_goal.ndim == 1:
             block_positions = achieved_goal[:-3].reshape(self.num_blocks, 3)
-            return self._roboverify_stack_tower_complete(block_positions)
+            return self._roboverify_task_complete(block_positions)
 
         # Batch case (rare for step()).
         leading_shape = achieved_goal.shape[:-1]
@@ -812,11 +1309,22 @@ class FetchPickAndPlaceConstruction(
         results = []
         for row in flat:
             block_positions = row[:-3].reshape(self.num_blocks, 3)
-            results.append(self._roboverify_stack_tower_complete(block_positions))
+            results.append(self._roboverify_task_complete(block_positions))
         return np.asarray(results, dtype=np.bool_).reshape(leading_shape)
 
     def eval_success(self, observation):
-        if self.case == "RoboVerifyStack":
+        if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+            if torch.is_tensor(observation):
+                obs_np = observation.detach().cpu().numpy()
+            else:
+                obs_np = observation
+
+            achieved_goal = self.achieved_goal_from_observation(obs_np)
+            desired_goal = self.goal_from_observation(obs_np)
+            ok = self._roboverify_goal_layout_complete(achieved_goal, desired_goal)
+            return float(self.num_blocks) if ok else 0.0
+
+        if self.case in ROBOVERIFY_CASES:
             # Return format matches existing semantics: `num_blocks` when success else 0.
             if torch.is_tensor(observation):
                 obs_np = observation.detach().cpu().numpy()
@@ -829,14 +1337,14 @@ class FetchPickAndPlaceConstruction(
             achieved_dim = achieved_goal.shape[-1]
             if achieved_goal.ndim == 1:
                 positions = achieved_goal[:-3].reshape(self.num_blocks, 3)
-                ok = self._roboverify_stack_tower_complete(positions)
+                ok = self._roboverify_task_complete(positions)
                 return float(self.num_blocks) if ok else 0.0
 
             flat = achieved_goal.reshape(-1, achieved_dim)
             results = []
             for row in flat:
                 positions = row[:-3].reshape(self.num_blocks, 3)
-                results.append(self._roboverify_stack_tower_complete(positions))
+                results.append(self._roboverify_task_complete(positions))
             success_rate = np.asarray(results, dtype=np.float32).reshape(achieved_goal.shape[:-1])
             success_rate = success_rate * float(self.num_blocks)
             return success_rate

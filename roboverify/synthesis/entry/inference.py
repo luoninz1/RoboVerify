@@ -1,8 +1,7 @@
 import itertools
 
-from sympy import And, Equivalent, Implies, Not, Or, symbols, to_cnf
-
 import synthesis.verification_lib.highlevel_verification_lib as highlevel_verification_lib
+from sympy import And, Equivalent, Implies, Not, Or, symbols, to_cnf
 from synthesis.inference_lib import inference
 
 
@@ -48,28 +47,34 @@ def generate_truth_table(expression, var_names):
 # generate_truth_table(expr, ['A', 'B', 'C'])
 
 if __name__ == "__main__":
-    # x_on_n0, x_on_y, x_on0_y, b_on_x, y_on0_x = symbols("x_on_n0, x_on_y, x_on0_y, b_on_x, y_on0_x")
+    import argparse
 
-    # formula = ((x_on_n0 & Equivalent(x_on_y, x_on0_y)) | (Not(x_on_n0) & b_on_x & Equivalent(x_on_y, y_on0_x)))
-    # cnf_formula = to_cnf(formula, simplify=True)
-    # print(cnf_formula)
-    # generate_truth_table(cnf_formula, ["x_on_n0", "x_on_y", "x_on0_y", "b_on_x", "y_on0_x"])
-
-    # formula_1 = (b_on_x | x_on_n0) & (Not(b_on_x) | Not(x_on_n0))
-    # formula_2 = Implies(x_on_n0 & Not(y_on0_x), x_on_y)
-    # formula_3 = Implies(Not(x_on_n0) & Not(x_on0_y), x_on_y)
-    # formula_4 = Implies(b_on_x & y_on0_x, x_on_y)
-    # formula_5 = Implies(x_on_y, x_on_y)
-    # inferred = (formula_1) & (formula_2) & (formula_3) & (formula_4) & (formula_5)
-    # import pdb; pdb.set_trace()
-    # generate_truth_table(inferred, ["x_on_n0", "x_on_y", "x_on0_y", "b_on_x", "y_on0_x"])
-    # inference.run_reverse_example()
-
-    # inferred_invariant, candidate_lists = inference.run_reverse_example()
-    # inferred_invariant, candidate_lists = inference.run_unstack_example()
-    context = highlevel_verification_lib.HighLevelContext(mode="declare")
-    inferred_invariant, candidate_lists = inference.run_proposal_example(
-        context=context
+    from synthesis.entry.inference_options import add_inference_options
+    from synthesis.inference_lib.demo_store import (
+        DemoStore,
+        InvInference,
+        tower_vocabulary,
     )
-    # inferred_invariant, candidate_lists = inference.run_proposal_example()
-    # inferred_invariant, candidate_lists = inference.run_partial_stack_example()
+
+    parser = argparse.ArgumentParser(
+        description="Infer a tower invariant from loop-head traces."
+    )
+    parser.add_argument("--demos", required=True)
+    parser.add_argument("--loop-id", default="1")
+    add_inference_options(parser)
+    parser.add_argument(
+        "--task", choices=["stack", "unstack", "reverse", "partial"], default="stack"
+    )
+    args = parser.parse_args()
+    context = highlevel_verification_lib.HighLevelContext(
+        mode="declare",
+        use_tbl=args.task in {"unstack", "reverse"},
+        exists_top=args.task in {"unstack", "reverse"},
+    )
+    inferred_invariant, candidate_lists = InvInference(
+        DemoStore.from_archive(args.demos),
+        args.loop_id,
+        tower_vocabulary(args.task),
+        context,
+        minimizer=args.invariant_minimizer,
+    )

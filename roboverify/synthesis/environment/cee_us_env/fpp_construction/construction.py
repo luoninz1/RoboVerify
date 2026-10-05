@@ -8,8 +8,8 @@ from gym.envs.robotics import fetch_env, rotations, utils
 from mujoco_py.generated import const
 
 from .colors import get_colors
-
-import pdb
+from synthesis.util.actions import bound_delta_action
+from synthesis.util.on import BLOCK_LENGTH
 
 BASIC_COLORS = ["0 1 0", "1 1 0", "0.2 0.8 0.8", "0.8 0.2 0.8", "1.0 0.0 0.0", "0 0 0"]
 
@@ -27,6 +27,8 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         case="Singletower",
         visualize_target=True,
         visualize_mocap=True,
+        grid_rows=None,
+        grid_cols=None,
     ):
         # Different parameters for the construction task:
         #   num_blocks: int (default: 1)
@@ -35,6 +37,27 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         #   obs_type: ['dictimage', 'np', 'dictstate'] (default: np)
         #   render_width, render_height: default: 64
         #   case: ["Singletower", "Pyramid", "Multitower", "All", "Flip", "Slide"]
+        self.case = case
+        self.grid_rows = grid_rows
+        self.grid_cols = grid_cols
+        if case == "RoboVerifyGrid":
+            if grid_rows is None or grid_cols is None:
+                raise ValueError("RoboVerifyGrid requires grid_rows and grid_cols.")
+            grid_rows = int(grid_rows)
+            grid_cols = int(grid_cols)
+            if grid_rows < 1 or grid_cols < 1:
+                raise ValueError("grid_rows and grid_cols must be positive.")
+            num_blocks = grid_rows * grid_cols
+            self.grid_rows = grid_rows
+            self.grid_cols = grid_cols
+        if case == "RoboVerifyPyramid":
+            from synthesis.environment.cee_us_env.fpp_construction_env import (
+                ROBOVERIFY_PYRAMID_NUM_BLOCKS,
+            )
+
+            num_blocks = ROBOVERIFY_PYRAMID_NUM_BLOCKS
+
+        self.num_blocks = num_blocks
         initial_qpos = {
             "robot0:slide0": 0.405,
             "robot0:slide1": 0.48,
@@ -44,15 +67,13 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         for i in range(num_blocks):
             initial_qpos[f"object{i}:joint"] = [1.25, 0.53, 0.4 + i * 0.06, 1.0, 0.0, 0.0, 0.0]
 
-        self.num_blocks = num_blocks
-        self.object_names = ["object{}".format(i) for i in range(self.num_blocks)]
         self.stack_only = stack_only
-        self.case = case
         self.obs_type = obs_type
         self.render_width = render_width
         self.render_height = render_height
         self.visualize_target = visualize_target
         self.visualize_mocap = visualize_mocap
+        self.object_names = ["object{}".format(i) for i in range(self.num_blocks)]
 
         if case == "Flip":
             distance_threshold = 0.087 * 2  # In radians! this is threshold for the euler angles
@@ -64,7 +85,27 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
             from environment.cee_us_env.fpp_construction.xml_gen_slide import (
                 generate_xml_slide as generate_xml,
             )
-        elif case == "RoboVerifyStack":
+        elif case == "RoboVerifyGrid":
+            distance_threshold = 0.05
+            from synthesis.environment.cee_us_env.fpp_construction.xml_gen_grid import (
+                generate_xml_grid as generate_xml,
+            )
+        elif case == "RoboVerifyPyramid":
+            distance_threshold = 0.05
+            from synthesis.environment.cee_us_env.fpp_construction.xml_gen_grid import (
+                generate_xml_grid as generate_xml,
+            )
+            from synthesis.environment.cee_us_env.fpp_construction_env import (
+                ROBOVERIFY_PYRAMID_NUM_BLOCKS,
+            )
+
+            num_blocks = ROBOVERIFY_PYRAMID_NUM_BLOCKS
+        elif case in (
+            "RoboVerifyStack",
+            "RoboVerifyUnstack",
+            "RoboVerifyReverse",
+            "RoboVerifyPartialStack",
+        ):
             # Uses the same block XML/layout as other stacking-style tower cases.
             distance_threshold = 0.05
             from synthesis.environment.cee_us_env.fpp_construction.xml_gen import generate_xml
@@ -268,6 +309,9 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
                         type=const.GEOM_BOX,
                         label="",
                     )
+            elif self.case in ("RoboVerifyGrid", "RoboVerifyPyramid"):
+                if hasattr(self, "_update_roboverify_goal_markers"):
+                    self._update_roboverify_goal_markers()
             elif self.case != "Flip" and self.case != "Slide":
                 sites_offset = (self.sim.data.site_xpos - self.sim.model.site_pos).copy()
 
@@ -278,6 +322,11 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         if not self.visualize_mocap:
             for body_idx1, val in enumerate(self.sim.model.body_mocapid):
                 if val != -1:
+                    body_name = self.sim.model.body_id2name(body_idx1)
+                    if self.case in ("RoboVerifyGrid", "RoboVerifyPyramid") and body_name.startswith(
+                        "grid_marker"
+                    ):
+                        continue
                     for geom_idx, body_idx2 in enumerate(self.sim.model.geom_bodyid):
                         if body_idx1 == body_idx2:
                             # Store transparency for later to show it.
@@ -338,7 +387,20 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         return True
 
     def _sample_goal(self):
-        cases = ["Singletower", "Pyramid", "Multitower", "Slide", "PickAndPlace", "Flip", "RoboVerifyStack"]
+        cases = [
+            "Singletower",
+            "Pyramid",
+            "Multitower",
+            "Slide",
+            "PickAndPlace",
+            "Flip",
+            "RoboVerifyStack",
+            "RoboVerifyUnstack",
+            "RoboVerifyReverse",
+            "RoboVerifyPartialStack",
+            "RoboVerifyGrid",
+            "RoboVerifyPyramid",
+        ]
         if self.case == "All":
             case_id = np.random.randint(0, len(cases))
             case = cases[case_id]
@@ -349,10 +411,64 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
 
         goals = []
 
-        if case == "RoboVerifyStack":
-            # Dummy desired goal. Reward/success for this case must be computed
+        if case in (
+            "RoboVerifyStack",
+            "RoboVerifyUnstack",
+            "RoboVerifyReverse",
+            "RoboVerifyPartialStack",
+        ):
+            # Dummy desired goal. Reward/success for these cases must be computed
             # from achieved object positions (not from desired goals).
             goals = [np.zeros(3, dtype=np.float32) for _ in range(self.num_blocks)]
+        elif case == "RoboVerifyGrid":
+            from synthesis.environment.cee_us_env.fpp_construction_env import (
+                ROBOVERIFY_GRID_GOAL_Y_OFFSET,
+                ROBOVERIFY_GRID_WORKSPACE_X_OFFSET,
+            )
+
+            spacing = BLOCK_LENGTH + 0.3 * BLOCK_LENGTH
+            grid_width = max(0, self.grid_cols - 1) * spacing
+            workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+            origin_x = workspace_x - 0.5 * grid_width
+            origin_y = self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET
+            for block_id in range(self.num_blocks):
+                row = block_id // self.grid_cols
+                col = block_id % self.grid_cols
+                goals.append(
+                    np.array(
+                        [
+                            origin_x + col * spacing,
+                            origin_y + row * spacing,
+                            self.height_offset,
+                        ],
+                        dtype=np.float32,
+                    )
+                )
+        elif case == "RoboVerifyPyramid":
+            from synthesis.environment.cee_us_env.fpp_construction_env import (
+                ROBOVERIFY_GRID_GOAL_Y_OFFSET,
+                ROBOVERIFY_GRID_WORKSPACE_X_OFFSET,
+                ROBOVERIFY_PYRAMID_LAYER_SIZES,
+            )
+
+            row_spacing = BLOCK_LENGTH + 0.3 * BLOCK_LENGTH
+            base_width = (ROBOVERIFY_PYRAMID_LAYER_SIZES[0] - 1) * row_spacing
+            workspace_x = self.initial_gripper_xpos[0] + ROBOVERIFY_GRID_WORKSPACE_X_OFFSET
+            origin_x = workspace_x - 0.5 * base_width
+            origin_y = self.robot_base_xy[1] + ROBOVERIFY_GRID_GOAL_Y_OFFSET
+            block_id = 0
+            for layer_idx, layer_size in enumerate(ROBOVERIFY_PYRAMID_LAYER_SIZES):
+                z = self.height_offset + layer_idx * BLOCK_LENGTH
+                layer_width = (layer_size - 1) * row_spacing
+                start_x = origin_x + 0.5 * (base_width - layer_width)
+                for col in range(layer_size):
+                    goals.append(
+                        np.array(
+                            [start_x + col * row_spacing, origin_y, z],
+                            dtype=np.float32,
+                        )
+                    )
+                    block_id += 1
         elif case == "Singletower":
             target_offset = np.array([-0.05, 0.0, 0.0])
             goal_object0 = self.initial_gripper_xpos[:3] + np.random.uniform(
@@ -629,7 +745,7 @@ class FetchBlockConstructionEnv(fetch_env.FetchEnv, gym_utils.EzPickle):
         utils.mocap_set_action(self.sim, action)
 
     def step(self, action):
-        action = np.clip(action, self.action_space.low, self.action_space.high)
+        action = bound_delta_action(action)
         self._set_action(action)
         try:
             self.sim.step()

@@ -21,11 +21,14 @@ def run_program_rollouts(
     fps: int = 20,
     save_png_frames: bool = True,
     video_filename: str = "000_trajectory.mp4",
+    on_loop_head=None,
 ) -> dict:
     """Run `program` for multiple seeds and optionally save frames/video.
 
     `env_factory(seed)` should construct and return an environment instance.
     If `timesteps` is not None, we best-effort set `max_step` on the env.
+    Pass ``on_loop_head=store.add`` to collect into a DemoStore across seeds;
+    each loop invocation records its own entry geometry.
     """
 
     results: list[dict] = []
@@ -52,14 +55,14 @@ def run_program_rollouts(
         timed_out = False
 
         if return_img:
-            traj, imgs = program.eval(env, return_img=True)
+            traj, imgs = program.eval(env, return_img=True, on_loop_head=on_loop_head)
             for frame in imgs:
                 frame_arr = np.asarray(frame, dtype=np.uint8)
                 if save_png_frames:
                     imageio.imwrite(seed_dir / f"img{frame_idx:04d}.png", frame_arr)
                 frame_idx += 1
         else:
-            traj = program.eval(env, return_img=False)
+            traj = program.eval(env, return_img=False, on_loop_head=on_loop_head)
 
         final_obs = traj[-1] if traj else None
         success = (
