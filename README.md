@@ -13,6 +13,9 @@ local code-model inference, scalar CEM tuning and bounded verification-guided
 repair. It covers the four tower tasks and insertion sort, plus tower merge/split,
 stable merge and sort/restore. Its finite trace/path checks are **not** the
 unbounded synthesis and invariant proofs described below.
+The [2026-10-11 local-model results](roboverify/synthesis/cap/RESULTS.md) cover
+all nine tasks: 7B completed 3/90 and 3B 2/90, with no improvement from CEM or
+verification-guided repair. None of the selected hybrid policies was certified.
 
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline

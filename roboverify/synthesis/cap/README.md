@@ -8,6 +8,9 @@ It reimplements that method for RoboVerify, rather than importing the original
 PyBullet perception and pick-and-place stack. The comparison measures physical
 completion, not whether an LLM declares success.
 
+The [completed 3B and 7B benchmark report](RESULTS.md) records all nine tasks.
+The verification-guided hybrid did not improve held-out completion in these runs.
+
 ## Shared observations and actions
 
 Tower policies receive opaque object identities, task roles and the existing
