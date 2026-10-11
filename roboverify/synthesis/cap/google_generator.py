@@ -22,7 +22,7 @@ from synthesis.cap.runtime import PolicyError, Runtime
 
 VENDOR = Path(__file__).with_name("vendor")
 PROVENANCE = json.loads((VENDOR / "google_cap.provenance.json").read_text())
-PROMPT_VERSION = "roboverify-google-lmp-v1"
+PROMPT_VERSION = "roboverify-google-lmp-v2"
 
 
 def provenance():
@@ -96,12 +96,6 @@ def normalize_policy(root_source, helpers):
         isinstance(node, ast.FunctionDef) and node.name == "policy"
         for node in tree.body
     )
-    if "policy" in helpers and not has_policy:
-        if len(tree.body) == 1 and ast.unparse(tree.body[0]) == "policy()":
-            return "\n\n".join(helpers.values()) + "\n"
-        raise PolicyError(
-            "Generated helper policy conflicts with the entrypoint wrapper"
-        )
     if has_policy:
         body = []
         for node in tree.body:
@@ -119,12 +113,14 @@ def normalize_policy(root_source, helpers):
                     "A def policy() response must contain only definitions and an optional policy() call"
                 )
             body.append(node)
-        root = ast.unparse(ast.Module(body=body, type_ignores=[]))
+        root = ast.unparse(ast.Module(body=body, type_ignores=[])) + "\nreturn policy()"
     else:
-        root = "def policy():\n" + textwrap.indent(
-            root_source.strip() or "pass", "    "
-        )
-    source = "\n\n".join([*helpers.values(), root]) + "\n"
+        root = root_source.strip() or "pass"
+    # All declarations share the same interpreted scope. A recursively generated
+    # helper can therefore call an inline helper or read a top-level local value.
+    # They must not be separated into global functions and wrapper-local code.
+    body = "\n\n".join([*helpers.values(), root])
+    source = "def policy():\n" + textwrap.indent(body, "    ") + "\n"
     Runtime.parse(source)
     return source
 
@@ -152,6 +148,7 @@ class GoogleGenerator:
             "Define def policy(): with no arguments. It must solve the task for any valid\nscene and any provided number of objects, not just one example.",
             "Write a top-level Python program (not a policy() definition) for any valid\nscene and any provided number of objects, not just one example.",
         )
+        description += "\nThis is a notebook-cell program, NOT a standalone script. Do not add an if __name__ == '__main__' guard. No underscore-prefixed names, including the throwaway name _. Use ordinary variable names and call the program directly.\n"
         # The few-shot examples and robot vocabulary are adapted to RoboVerify;
         # the original NumPy/Shapely/put_first_on_second APIs are NOT capabilities.
         prompt = description + "\n{variable_vars_imports}\n"

@@ -116,10 +116,18 @@ class GoogleGeneratorTests(unittest.TestCase):
         calls = []
         Runtime({"pick": calls.append}).run(result["source"], inputs={"base": "x"})
         self.assertEqual(calls, ["x"])
-        self.assertEqual(
-            normalize_policy("policy()", {"policy": "def policy():\n    pass"}),
-            "def policy():\n    pass\n",
+        source = normalize_policy("policy()", {"policy": "def policy():\n    return 7"})
+        Runtime({}).run(source)
+
+    def test_generated_and_inline_helpers_share_notebook_scope(self):
+        result, _ = self.generate(
+            [
+                "values = [1, 2]\ndef inline():\n    return sum(values)\nassert missing() == 3",
+                "def missing():\n    return inline()",
+            ]
         )
+        self.assertEqual(result["status"], "generated", result.get("error"))
+        Runtime({}).run(result["source"])
 
     def test_generation_never_executes_primitive_calls_or_helper_top_level_statements(
         self,
@@ -175,7 +183,7 @@ class GoogleGeneratorTests(unittest.TestCase):
         self.assertNotIn("Tower API", prompt)
         self.assertNotIn("put_first_on_second", prompt)
         self.assertEqual(
-            result["generator"]["prompt_version"], "roboverify-google-lmp-v1"
+            result["generator"]["prompt_version"], "roboverify-google-lmp-v2"
         )
         self.assertEqual(json.loads(json.dumps(result))["generator"], provenance())
 
