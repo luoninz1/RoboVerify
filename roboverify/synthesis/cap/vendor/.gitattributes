@@ -1,0 +1,2 @@
+# Preserve the upstream source snapshot byte-for-byte (including trailing spaces).
+google_cap.py whitespace=-blank-at-eol

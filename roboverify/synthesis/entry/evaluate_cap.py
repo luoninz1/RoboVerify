@@ -1,4 +1,4 @@
-"""Run the Google-style CaP / CEM / RoboVerify-repair comparison."""
+"""Run the Google CaP port / CEM / RoboVerify-repair comparison."""
 
 import argparse
 
@@ -10,6 +10,9 @@ from synthesis.cap.runner import EvaluationConfig, run_evaluation
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-url", default="http://127.0.0.1:8123")
+    parser.add_argument(
+        "--implementation", choices=("google", "legacy"), default="google"
+    )
     parser.add_argument("--tasks", nargs="+", choices=TASKS, default=list(TASKS))
     parser.add_argument("--output-root", default="runs")
     parser.add_argument("--run-name", default="cap")

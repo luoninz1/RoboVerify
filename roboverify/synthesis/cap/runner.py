@@ -13,6 +13,7 @@ import numpy as np
 
 from synthesis.benchmarks.specs import ROW_TASKS, TASKS, manifest
 from synthesis.cap.generator import Generator
+from synthesis.cap.google_generator import GoogleGenerator, provenance
 from synthesis.cap.prompts import task_prompt
 from synthesis.cap.row_verification import verify_row_policy
 from synthesis.cap.verification import verify_tower_trace
@@ -22,6 +23,7 @@ from synthesis.experiment.run_logger import RunLogger
 @dataclass(frozen=True)
 class EvaluationConfig:
     tasks: tuple[str, ...] = TASKS
+    implementation: str = "google"
     train_cases: int = 5
     validation_cases: int = 5
     test_cases: int = 10
@@ -44,6 +46,8 @@ class EvaluationConfig:
     run_name: str = "cap"
 
     def validate(self):
+        if self.implementation not in ("google", "legacy"):
+            raise ValueError("Unknown CaP implementation")
         if not self.tasks or any(task not in TASKS for task in self.tasks):
             raise ValueError("Unknown or empty benchmark task set")
         if (
@@ -131,7 +135,8 @@ def feedback_for(executions, verification):
 class Evaluation:
     def __init__(self, config, model, suite, logger):
         self.config, self.model, self.suite, self.logger = config, model, suite, logger
-        self.generator = Generator(
+        generator = GoogleGenerator if config.implementation == "google" else Generator
+        self.generator = generator(
             model,
             helper_budget=config.helper_budget,
             max_tokens=config.max_tokens,
@@ -419,7 +424,7 @@ class Evaluation:
                 feedback=dumps(feedback),
                 previous=previous["source"]
                 or (
-                    previous["generation"][-1]["response"]["text"]
+                    previous["generation"][-1].get("response", {}).get("text", "")
                     if previous["generation"]
                     else ""
                 ),
@@ -511,6 +516,14 @@ def run_evaluation(config, model, *, suite=None):
     slug = metadata["model"].split("/")[-1].lower()
     resolved = {
         **asdict(config),
+        "generator": (
+            provenance()
+            if config.implementation == "google"
+            else {
+                "implementation": "legacy",
+                "method": "independent Google-style reimplementation",
+            }
+        ),
         "model": metadata,
         "protocol": "oracle predicates; paired full snapshots; frozen held-out tests",
         "budget_comparison": "hybrid has additional repair and optimization budget; no equal-cost causal claim",

@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -61,6 +62,9 @@ class RunnerTests(unittest.TestCase):
             self.assertTrue((path / "artifacts/episode_index.json").is_file())
             self.assertTrue((path / "artifacts/stack/selection.json").is_file())
             self.assertTrue((path / "result.json").is_file())
+            metadata = json.loads((path / "config.json").read_text())["config"]
+            self.assertEqual(metadata["implementation"], "google")
+            self.assertEqual(metadata["generator"]["implementation"], "google")
             self.assertTrue(suite.closed)
             self.assertEqual(
                 len(suite.calls), 4
@@ -91,6 +95,38 @@ class RunnerTests(unittest.TestCase):
     def test_invalid_configuration(self):
         with self.assertRaises(ValueError):
             EvaluationConfig(test_cases=0).validate()
+        with self.assertRaises(ValueError):
+            EvaluationConfig(implementation="unknown").validate()
+
+    def test_legacy_generator_remains_selectable(self):
+        from synthesis.cap.generator import Generator
+        from synthesis.cap.runner import Evaluation
+
+        config = EvaluationConfig(implementation="legacy")
+        config.validate()
+        self.assertIsInstance(
+            Evaluation(config, Model(), Suite(), None).generator, Generator
+        )
+
+    def test_transport_error_can_enter_repair_without_missing_response_crash(self):
+        class BrokenModel(Model):
+            def generate(self, *args, **kwargs):
+                raise ConnectionError("test transport failure")
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = EvaluationConfig(
+                tasks=("stack",),
+                train_cases=1,
+                validation_cases=1,
+                test_cases=1,
+                initial_candidates=1,
+                repairs=1,
+                cem_iterations=0,
+                output_root=directory,
+            )
+            _, result = run_evaluation(config, BrokenModel(), suite=Suite())
+            self.assertEqual(result["stack"]["cap_only"]["successes"], 0)
+            self.assertEqual(result["stack"]["cap_roboverify"]["successes"], 0)
 
 
 if __name__ == "__main__":
