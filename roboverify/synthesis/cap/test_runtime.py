@@ -4,6 +4,18 @@ from synthesis.cap.runtime import PolicyBudgetExceeded, PolicyError, Runtime
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_pure_python_sorting_and_lambda(self):
+        source = """
+def policy():
+    values = [3, 1]
+    values.insert(1, 2)
+    values.sort(key=lambda item: -item)
+    assert values == [3, 2, 1]
+    assert sorted(values) == [1, 2, 3]
+    return sum(values)
+"""
+        self.assertEqual(Runtime({}).run(source), 6)
+
     def test_helper_feedback_and_comprehension(self):
         state = {"a": 0, "b": 0}
         calls = []

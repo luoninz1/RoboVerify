@@ -10,10 +10,11 @@ You may define helpers or call missing helpers that will be generated later.
 Allowed Python: def, local variables, if, for, while, break, continue, return,
 assert, list/tuple/dict, comprehensions, ordinary arithmetic/comparisons.
 Builtins: all, any, len, range, enumerate, list, tuple, reversed, zip, next,
-min, max, abs, bool, int, float, dict, ValueError, RuntimeError.
-List methods: append, extend, pop, index, remove, copy, reverse.
+min, max, abs, bool, int, float, dict, sorted, sum, ValueError, RuntimeError.
+List methods: append, extend, pop, index, remove, copy, reverse, insert, sort, count.
 Dict methods: get, keys, values, items, copy. Tuple: index, count.
-No imports, numpy, classes, lambda, try/except, raw env, raw coordinates,
+Lambda functions are allowed for local computations or sorting keys.
+No imports, numpy, classes, try/except, raw env, raw coordinates,
 image access, files, exec/eval, or direct simulator access.
 Do not reuse an API name as a variable, parameter name, or helper name.
 objects() returns a fresh list of all object handles in arbitrary identity
@@ -57,6 +58,20 @@ def has_other_above(obj):
 Example of numeric parameter syntax:
 clearance = parameter("clearance", 0.15, 0.10, 0.25)
 Object identities such as base are supplied inputs, NEVER numeric parameters.
+
+Example of composing primitives for ONE transfer, not a task algorithm:
+def place_one_example(source, support):
+    pick(source)
+    move(source, source, source, (0.0, 0.0, 0.20))
+    move(support, support, source, (0.0, 0.0, 0.0))
+    move(support, support, support, (0.0, 0.0, 0.05))
+    release(source, retreat_offset=0.15)
+This example is suitable only if source is exposed, support is the intended
+top support, and the lifted height clears intervening obstacles. It is not an
+additional API. Numeric move(0,0,z) and z(obj) are NOT available. Use relation
+queries instead of numeric positions. Sorting may use only permitted relations,
+for example counts of related objects, never inaccessible XYZ values.
+Use the supplied base handle for the requested bottom, not objects()[0].
 """
 
 ROW = """
@@ -77,6 +92,18 @@ querying next_star again. Save every target needed by a transfer sequence before
 moving its occupant. Local lists of handles and previously queried relations
 are allowed. base is the object initially in the leftmost row slot.
 Equal keys: neither keyless(a,b) nor keyless(b,a). Preserve their initial order.
+
+Example of ONE transfer to an already empty destination handle:
+def transfer_one_example(obj, destination):
+    pick(obj)
+    move(destination)
+    release(destination)
+This is composed from primitives, not an additional API. A row initially has
+no empty row slot. The buffer can create a vacancy, but every displaced object
+must eventually return to the row. A local list may track the row order while a
+transfer sequence is incomplete. sorted() changes only a local list, NEVER the
+physical row. Keys are opaque: sorting must use keyless comparisons or derived
+relational ranks, not a hidden numeric-key accessor.
 
 Example of a relational helper (not a task solution):
 def is_adjacent(a, b):

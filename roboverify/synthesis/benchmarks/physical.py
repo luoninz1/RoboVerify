@@ -114,6 +114,10 @@ class PhysicalSuite:
             self.starts[case.name] = (scene, capture_simulator_state(env))
         scene, start = self.starts[case.name]
         restore_simulator_state(env, start)
+        # sim.forward() recalculates qacc_warmstart. Restore captured inputs
+        # afterwards so the next physics step starts from the archived values.
+        for name, values in start.inputs:
+            getattr(env.sim.data, name)[:] = values
         return env, deepcopy(scene)
 
     def close(self):
@@ -146,6 +150,7 @@ class PhysicalSuite:
         with np.load(path, allow_pickle=False) as arrays:
             env.sim.set_state_from_flattened(arrays["simulator_state"])
             env.goal = arrays["goal"].copy()
+            env.sim.forward()
             for name in (
                 "ctrl",
                 "mocap_pos",
@@ -155,7 +160,6 @@ class PhysicalSuite:
                 "xfrc_applied",
             ):
                 getattr(env.sim.data, name)[:] = arrays[name]
-        env.sim.forward()
         self.starts[case.name] = (deepcopy(scene), capture_simulator_state(env))
 
     def run(

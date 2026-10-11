@@ -67,7 +67,18 @@ _CMP = {
     ast.NotIn: lambda a, b: a not in b,
 }
 _METHODS = {
-    list: {"append", "extend", "pop", "index", "remove", "copy", "reverse"},
+    list: {
+        "append",
+        "extend",
+        "pop",
+        "index",
+        "remove",
+        "copy",
+        "reverse",
+        "insert",
+        "sort",
+        "count",
+    },
     dict: {"get", "keys", "values", "items", "copy"},
     tuple: {"index", "count"},
 }
@@ -103,6 +114,10 @@ class Runtime:
             "int": int,
             "float": float,
             "dict": dict,
+            "sorted": lambda items, **kwargs: sorted(
+                self.bounded_items(items), **kwargs
+            ),
+            "sum": lambda items, start=0: sum(self.bounded_items(items), start),
             "ValueError": ValueError,
             "RuntimeError": RuntimeError,
         }
@@ -144,7 +159,6 @@ class Runtime:
             ast.AsyncFunctionDef,
             ast.AsyncFor,
             ast.Delete,
-            ast.Lambda,
         )
         for node in ast.walk(tree):
             if isinstance(node, forbidden):
@@ -316,6 +330,14 @@ class Runtime:
             value = self.expr(node.value, scope)
             self.bind(node.target, value, scope)
             return value
+        if isinstance(node, ast.Lambda):
+            function = ast.FunctionDef(
+                name="lambda",
+                args=node.args,
+                body=[ast.Return(value=node.body)],
+                decorator_list=[],
+            )
+            return _Function(self, function, scope)
         if isinstance(node, ast.Subscript):
             return self.expr(node.value, scope)[self.expr(node.slice, scope)]
         if isinstance(node, ast.Slice):

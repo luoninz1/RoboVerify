@@ -7,6 +7,13 @@ learned invariants and counterexample-guided refinement.
 
 ## Project status
 
+A [Google-style Code as Policies baseline](roboverify/synthesis/cap/README.md)
+now has restricted primitive/predicate adapters, full-state paired evaluation,
+local code-model inference, scalar CEM tuning and bounded verification-guided
+repair. It covers the four tower tasks and insertion sort, plus tower merge/split,
+stable merge and sort/restore. Its finite trace/path checks are **not** the
+unbounded synthesis and invariant proofs described below.
+
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline
 modes. Collection holds the initial gripper position for **50 settling steps**,
