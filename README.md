@@ -7,15 +7,18 @@ learned invariants and counterexample-guided refinement.
 
 ## Project status
 
-A [Google-style Code as Policies baseline](roboverify/synthesis/cap/README.md)
-now has restricted primitive/predicate adapters, full-state paired evaluation,
+A [Google Code as Policies source port](roboverify/synthesis/cap/README.md)
+now uses Google's vendored `LMP`/`LMPFGen` as the default generator, with
+restricted primitive/predicate adapters, full-state paired evaluation,
 local code-model inference, scalar CEM tuning and bounded verification-guided
 repair. It covers the four tower tasks and insertion sort, plus tower merge/split,
 stable merge and sort/restore. Its finite trace/path checks are **not** the
 unbounded synthesis and invariant proofs described below.
-The [2026-10-11 local-model results](roboverify/synthesis/cap/RESULTS.md) cover
+The [2026-10-11 local-model results](roboverify/synthesis/cap/RESULTS.md) use the
+previous independent implementation (`--implementation legacy`) and cover
 all nine tasks: 7B completed 3/90 and 3B 2/90, with no improvement from CEM or
 verification-guided repair. None of the selected hybrid policies was certified.
+These are not benchmark results for the new source port.
 
 The Stack workflow has a standalone multi-seed DSL demonstration collector,
 full-state archives, optional 20 FPS videos, and shared `full` / `verify` pipeline

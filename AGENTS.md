@@ -91,6 +91,14 @@ the bounded search for executable counterexamples.
 Update the relevant status or entry when it changes, rather than maintaining a
 separate implementation-plan history.
 
+The CaP baseline defaults to a Google `LMP`/`LMPFGen` source port under
+`synthesis/cap/vendor/`; preserve this snapshot and its Apache-2.0 license.
+`google_generator.py` replaces legacy inference and execution hooks with the
+local model and restricted AST runtime. `--implementation legacy` retains the
+independent implementation used by the existing full benchmark report. Do not
+attribute those results to the new port. The hybrid remains bounded
+verification-guided LLM repair, not the native full synthesis/proof pipeline.
+
 - **The paper is an artifact under test, not a specification.** Neither paper nor
   code automatically wins a disagreement. Do not change code solely because the
   paper says so, and do not use its experimental numbers as regression targets.

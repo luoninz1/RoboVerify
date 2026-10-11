@@ -639,3 +639,12 @@ These changes affect benchmark preparation only, not generated policies or the
 shared controllers. Interrupted development runs remain available but are not
 accepted benchmark results. Exact replay and five-block clearance have dedicated
 simulator regression tests.
+
+The subsequent Google-source port initially protected object role names as if
+they were immutable action APIs, incorrectly rejecting helper arguments named
+`base`. Role inputs are now known to the generator but ordinary local argument
+names; only actual APIs and builtins are protected. A regression covers this
+distinction. Generated and inline helpers also share the same notebook scope in
+the entrypoint wrapper. Pre-fix smoke runs are retained as development artifacts,
+not benchmark results for the source port. These are adapter fixes, not changes
+to the DSL, controllers or invariant inference.

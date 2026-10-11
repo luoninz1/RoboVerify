@@ -1,15 +1,54 @@
-# Google style CaP baseline evaluation
+# Google CaP source port and baseline evaluation
 
-This baseline generates Python policies and missing helper functions with a local
-code model, following the hierarchical generation method in
-[Google Code as Policies](https://code-as-policies.github.io/) and its
-[interactive implementation](https://github.com/google-research/google-research/blob/master/code_as_policies/Interactive_Demo.ipynb).
-It reimplements that method for RoboVerify, rather than importing the original
-PyBullet perception and pick-and-place stack. The comparison measures physical
-completion, not whether an LLM declares success.
+The default implementation now runs the actual `LMP`, `LMPFGen` and
+`FunctionParser` source from [Google Code as Policies](https://code-as-policies.github.io/),
+adapted to RoboVerify's primitives and local inference. This is a restricted
+source port, not the original PyBullet robot/perception stack or an independent
+reimplementation. Completion measures physical execution, not an LLM's claim.
 
-The [completed 3B and 7B benchmark report](RESULTS.md) records all nine tasks.
-The verification-guided hybrid did not improve held-out completion in these runs.
+The [completed 3B and 7B benchmark report](RESULTS.md) records all nine tasks for
+the **previous independent implementation**, retained as `--implementation legacy`.
+Its hybrid did not improve held-out completion. Those numbers are not results
+for this Google source port; a new full comparison requires separate runs.
+
+## Source provenance and replacements
+
+[vendor/google_cap.py](vendor/google_cap.py) contains the unmodified generation
+cell from Google's [Interactive Demo at commit 71896d4](https://github.com/google-research/google-research/blob/71896d4b6816983672aa6999e2dc92a3cfe904e4/code_as_policies/Interactive_Demo.ipynb),
+with a copyright/SPDX header and `import ast` added. The
+[provenance record](vendor/google_cap.provenance.json) pins the full commit,
+notebook/cell hashes and original helper prompt for reference. Google's
+[Apache-2.0 license](vendor/LICENSE) is included. Do not format the snapshot;
+its original trailing whitespace is preserved by a scoped Git attribute.
+
+[google_generator.py](google_generator.py) loads an isolated copy of this trusted
+module for each generation and supplies these replacements:
+
+- Legacy `openai.Completion.create` calls use the existing local chat client.
+  Requests, responses, seeds and completion settings are archived. Fences are
+  removed and next-query stop delimiters applied before restricted AST parsing.
+  Local transport failures propagate with the client timeout; the original
+  unbounded SDK retry and retired Edit endpoint are not enabled.
+- Google `LMPFGen` still discovers calls, prioritizes assignment signatures,
+  recursively creates child helpers and rebinds their parents. An adapter
+  recognizes local definitions, arguments and aliases so they are not treated
+  as missing global functions. A bounded helper budget also covers recursion.
+- `var_exists` becomes dictionary name lookup. `exec_safe` becomes a
+  definitions-only registrar: it never executes a generated body or expression.
+  `LMP` uses generation-only `debug_mode=True`, not a skipped evaluation.
+  The complete program executes later in the existing bounded AST interpreter.
+- Python's `ast.unparse` replaces `astunparse`; pretty-printing is plain text.
+  RoboVerify-specific prompts replace the NumPy/Shapely/perception/macros in
+  Google's examples. Prompt version is recorded separately from source hashes.
+  Main-program query/stop delimiters use `# task:` rather than any `#` comment.
+- A mechanical `policy()` entry wrapper shares one interpreted scope between
+  generated and inline helpers. Already supplied `def policy()` programs are
+  called once. Raw completions and normalized source are both saved; this is
+  interface adaptation, not an algorithmic repair of model output.
+
+The source stays LLM-generated. Neither this replacement nor CEM changes it into
+RoboVerify's native CFG/MCMC program-structure synthesis. Google perception,
+PyBullet, `put_first_on_second` and raw-position access are deliberately excluded.
 
 ## Shared observations and actions
 
@@ -59,6 +98,10 @@ artifact reports actual calls and physical rollouts; these runs do **not** suppo
 an equal-cost causal claim. Identical source/parameters/snapshots are physically
 executed once and the measured result is reused, with reuse recorded explicitly.
 No test failure is used to tune parameters or repair code.
+No expert demonstration is given to CaP. Training/validation/test refer to
+initial scenes; recorded candidate trajectories are not expert demonstrations.
+The examples, candidate selection and feedback rounds mean this is not a strict
+single-shot zero-shot evaluation.
 
 ## Verification coverage
 
@@ -111,10 +154,10 @@ local MuJoCo installation is supported by setting `MUJOCO_PY_MUJOCO_PATH` and it
 `mujoco_py`. Do not mix the inference and simulator Torch environments.
 
 ```bash
-uv run python -m synthesis.entry.evaluate_cap --model-url http://127.0.0.1:8123
-uv run python -m synthesis.entry.evaluate_cap --model-url http://127.0.0.1:8124
-uv run python -m synthesis.experiment.report --run runs/cap/latest
-uv run python -m synthesis.cap.report --run runs/cap/latest
+uv run python -m synthesis.entry.evaluate_cap --implementation google --model-url http://127.0.0.1:8123 --run-name cap-google
+uv run python -m synthesis.entry.evaluate_cap --implementation google --model-url http://127.0.0.1:8124 --run-name cap-google
+uv run python -m synthesis.experiment.report --run runs/cap-google/latest
+uv run python -m synthesis.cap.report --run runs/cap-google/latest
 ```
 
 For a pipeline smoke, add `--tasks stack --initial-candidates 1 --repairs 1
@@ -124,7 +167,7 @@ line. Such a smoke is not the full benchmark.
 Fast tests:
 
 ```bash
-uv run python -m unittest synthesis.cap.test_runtime synthesis.cap.test_generator synthesis.cap.test_row_verification synthesis.cap.test_runner synthesis.benchmarks.test_specs -v
+uv run python -m unittest synthesis.cap.test_runtime synthesis.cap.test_generator synthesis.cap.test_google_generator synthesis.cap.test_row_verification synthesis.cap.test_runner synthesis.benchmarks.test_specs -v
 ```
 
 Physical adapter tests additionally require MuJoCo. Run directories use the shared

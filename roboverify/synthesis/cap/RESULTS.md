@@ -1,5 +1,11 @@
 # CaP baseline benchmark results
 
+These full benchmark results used the **independent Google-style implementation**,
+not Google's source. It is now selectable with `--implementation legacy`.
+The default is the [Google LMP/LMPFGen source port](README.md#source-provenance-and-replacements);
+its full benchmark results have not yet been collected. Do not relabel or pool
+these old results with source-port runs.
+
 The 2026-10-11 comparison found **no held-out improvement** from scalar CEM or
 bounded verification-guided repair. Qwen2.5-Coder-7B-Instruct completed 3/90 cases;
 3B completed 2/90. Counts were identical for CaP only, CaP+CEM and CaP+RoboVerify.
@@ -105,8 +111,8 @@ Run directories are not committed. Development and interrupted runs are retained
 but excluded. From `roboverify/`, configure MuJoCo and start servers as in the guide:
 
 ```bash
-uv run python -m synthesis.entry.evaluate_cap --model-url http://127.0.0.1:8123 --run-name cap-v2
-uv run python -m synthesis.entry.evaluate_cap --model-url http://127.0.0.1:8124 --run-name cap-v2
+uv run python -m synthesis.entry.evaluate_cap --implementation legacy --model-url http://127.0.0.1:8123 --run-name cap-v2
+uv run python -m synthesis.entry.evaluate_cap --implementation legacy --model-url http://127.0.0.1:8124 --run-name cap-v2
 uv run python -m synthesis.cap.report --glob 'runs/cap-v2/2026*'
 ```
 
@@ -115,3 +121,37 @@ GPU memory; downloaded weights remain cached. Validation passed **32 new baselin
 tests and 27 existing motion/BMC/logger tests**. Physical regressions cover buffered
 row sorting, primitive Stack plus motion checks, exact replay and five-block
 clearance. These validate the harness, not generated policies' task-solving ability.
+
+## Google-source port smoke — not a full benchmark
+
+The separate 2026-10-11 smoke used clean commit `ecf41a1`, Google's pinned
+`LMP`/`LMPFGen` source, prompt version `roboverify-google-lmp-v2` and the same
+7B model revision. It used Stack and Insertion Sort only: one initial candidate,
+one repair, one training scene, one validation scene and two held-out scenes per
+task. CEM had one iteration, two samples, one elite and one training scene.
+
+All three variants completed 0/4 held-out cases. Stack generation shadowed the
+`objects` API and was rejected; the sorting candidate generated successfully but
+attempted to place two objects into the single buffer without emptying it. The
+resulting placement failures are invalid-policy actions, not evidence of an
+intrinsic controller defect. Its repair imported unavailable utilities and was
+rejected. The selected sorting candidate was symbolically `refuted`; Stack was
+`unsupported`. No candidate was certified and no algorithmic output was manually
+fixed. Training-only feedback and validation selection ran before held-out tests.
+
+The smoke recorded four LLM calls, five physical rollouts and 25 episode records
+including reuse. It tests the generation/evaluation/feedback integration, not
+task-solving quality or a nine-task comparison. Earlier source-port development
+smokes are excluded. The local
+[summary and episode artifacts](../../runs/cap-google-smoke/20261011-192205-ecf41a1-qwen2.5-coder-7b-instruct/artifacts/summary.json)
+are retained outside version control. Read them through the bounded reports:
+
+```bash
+uv run python -m synthesis.cap.report --run runs/cap-google-smoke/20261011-192205-ecf41a1-qwen2.5-coder-7b-instruct
+uv run python -m synthesis.experiment.report --run runs/cap-google-smoke/20261011-192205-ecf41a1-qwen2.5-coder-7b-instruct
+```
+
+The final port regression command passed 93 tests covering CaP, both benchmark
+adapters, bounded symbolic checks, BMC, motion verification and run logging. These
+include exact upstream cell/license hashes, recursive helper generation, shared
+helper scope, single-entry execution and capability-rebinding rejection.
