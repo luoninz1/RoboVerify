@@ -56,16 +56,11 @@ def _names(task):
         "pick",
         "move",
         "release",
-        "base",
     }
     if task in ROW_TASKS:
         names |= {"next_star", "keyless", "target", "buffer_target"}
     else:
         names |= {"on_star", "on_star_zero", "higher", "scattered"}
-        if task == "tower_merge":
-            names |= {"root_a", "root_b"}
-        if task == "tower_split":
-            names.add("cut")
     return names
 
 
@@ -146,7 +141,13 @@ class GoogleGenerator:
         core = _load_core()
         protected = _names(task)
         fixed_vars = {name: object() for name in protected}
-        variable_vars = {}
+        # Roles are input values, not immutable callable capabilities. In
+        # particular, def transfer(obj, base) is a legitimate helper signature.
+        variable_vars = {"base": object()}
+        if task == "tower_merge":
+            variable_vars.update(root_a=object(), root_b=object())
+        if task == "tower_split":
+            variable_vars["cut"] = object()
         description = task_prompt(task).replace(
             "Define def policy(): with no arguments. It must solve the task for any valid\nscene and any provided number of objects, not just one example.",
             "Write a top-level Python program (not a policy() definition) for any valid\nscene and any provided number of objects, not just one example.",

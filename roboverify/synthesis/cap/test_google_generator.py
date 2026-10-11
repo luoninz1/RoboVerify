@@ -100,6 +100,16 @@ class GoogleGeneratorTests(unittest.TestCase):
         with self.assertRaises(PolicyBudgetExceeded):
             Runtime({}, max_call_depth=3).run(result["source"], inputs={"base": "x"})
 
+    def test_input_role_names_can_be_helper_arguments_but_apis_cannot(self):
+        result, client = self.generate(
+            ["def transfer(obj, base):\n    pick(obj)\ntransfer(base, base)"]
+        )
+        self.assertEqual(result["status"], "generated", result.get("error"))
+        self.assertIn("from utils import base", client.requests[0][0][1]["content"])
+        calls = []
+        Runtime({"pick": calls.append}).run(result["source"], inputs={"base": "x"})
+        self.assertEqual(calls, ["x"])
+
     def test_existing_policy_and_optional_call_execute_once(self):
         result, _ = self.generate(["def policy():\n    pick(base)\npolicy()"])
         self.assertEqual(result["status"], "generated", result.get("error"))
