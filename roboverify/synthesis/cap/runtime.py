@@ -113,6 +113,7 @@ class Runtime:
             "bool": bool,
             "int": int,
             "float": float,
+            "str": str,
             "dict": dict,
             "sorted": lambda items, **kwargs: sorted(
                 self.bounded_items(items), **kwargs
@@ -278,6 +279,19 @@ class Runtime:
         self.tick()
         if isinstance(node, ast.Constant):
             return node.value
+        if isinstance(node, ast.JoinedStr):
+            return "".join(str(self.expr(item, scope)) for item in node.values)
+        if isinstance(node, ast.FormattedValue):
+            value = self.expr(node.value, scope)
+            if node.conversion == ord("r"):
+                value = repr(value)
+            elif node.conversion == ord("s"):
+                value = str(value)
+            elif node.conversion == ord("a"):
+                value = ascii(value)
+            return format(
+                value, self.expr(node.format_spec, scope) if node.format_spec else ""
+            )
         if isinstance(node, ast.Name):
             return scope.get(node.id)
         if isinstance(node, (ast.List, ast.Tuple, ast.Set)):

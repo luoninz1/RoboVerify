@@ -50,6 +50,19 @@ class PhysicalTests(unittest.TestCase):
         noop = self.suite.run(case, "def policy():\n    pass\n", keys_override=keys)
         self.assertFalse(noop["success"])
 
+    def test_five_block_initial_tower_is_clear_of_gripper(self):
+        env, scene = self.suite.prepare(Case("unstack", "test", 1001, 5, "reverse"))
+        grip = env.sim.data.get_site_xpos("robot0:grip")
+        self.assertGreater(
+            grip[2], max(point[2] for point in scene.positions.values()) + 0.09
+        )
+        self.assertTrue(
+            all(
+                np.linalg.norm(np.array(point)[:2] - grip[:2]) > 0.10
+                for point in scene.positions.values()
+            )
+        )
+
     def test_exact_full_snapshot_restore_and_archive(self):
         case = Case("stack", "train", 0, 3)
         env, scene = self.suite.prepare(case)

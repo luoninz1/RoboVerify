@@ -179,7 +179,7 @@ def make_scene(case, objects, *, gripper, robot_base_xy, table_center):
             positions = {
                 obj: (
                     x,
-                    y + (-0.08 if group_index == 0 else 0.08),
+                    y + (-0.16 if group_index == 0 else 0.16),
                     float(table_center + level * BLOCK_LENGTH),
                 )
                 for group_index, group in enumerate(groups)
@@ -189,7 +189,7 @@ def make_scene(case, objects, *, gripper, robot_base_xy, table_center):
                 roles["base"] = groups[0][1]
         else:
             positions = {
-                obj: (x, y - 0.08, float(table_center + level * BLOCK_LENGTH))
+                obj: (x, y - 0.16, float(table_center + level * BLOCK_LENGTH))
                 for level, obj in enumerate(order)
             }
             if case.task == "tower_split":

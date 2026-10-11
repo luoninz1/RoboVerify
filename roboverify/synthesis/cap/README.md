@@ -111,6 +111,7 @@ local MuJoCo installation is supported by setting `MUJOCO_PY_MUJOCO_PATH` and it
 uv run python -m synthesis.entry.evaluate_cap --model-url http://127.0.0.1:8123
 uv run python -m synthesis.entry.evaluate_cap --model-url http://127.0.0.1:8124
 uv run python -m synthesis.experiment.report --run runs/cap/latest
+uv run python -m synthesis.cap.report --run runs/cap/latest
 ```
 
 For a pipeline smoke, add `--tasks stack --initial-candidates 1 --repairs 1
@@ -127,3 +128,6 @@ Physical adapter tests additionally require MuJoCo. Run directories use the shar
 logger contract. Read metrics and logs using the bounded experiment report, not
 by opening the JSONL or stdout files. `artifacts/summary.json` is the compact task
 comparison; `episode_index.json` references individual execution artifacts.
+The CaP report adds bounded per-task counts and separates controller, API,
+goal, generation and setup failures. Setup errors are harness failures, not
+evidence that a method cannot solve the task.

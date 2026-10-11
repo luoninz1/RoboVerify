@@ -624,3 +624,18 @@ for metric definitions, full results, commands and artifacts. The four local
 demonstration archives were deleted; reports/videos remain. No replacement
 collection or fresh demonstration-consuming proof run accompanied this update.
 Physical refinement still requires justified tracking and attachment bounds.
+
+## 38. CaP baseline adapter corrections
+
+**Implementation defect in the new benchmark adapter; no paper theorem change.**
+
+The first CaP development runs exposed two adapter defects, separate from the
+paper's synthesis claims. `sim.forward()` recalculates `qacc_warmstart`, so full
+snapshot replay now reapplies captured simulator inputs after forwarding.
+Five-block input towers placed too close to the initial gripper were disturbed
+during initialization. The baseline's columns now use 0.16 m lateral separation
+from the robot-base Y coordinate, and all manifests must pass settling checks.
+These changes affect benchmark preparation only, not generated policies or the
+shared controllers. Interrupted development runs remain available but are not
+accepted benchmark results. Exact replay and five-block clearance have dedicated
+simulator regression tests.

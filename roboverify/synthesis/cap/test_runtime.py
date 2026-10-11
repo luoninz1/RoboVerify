@@ -16,6 +16,12 @@ def policy():
 """
         self.assertEqual(Runtime({}).run(source), 6)
 
+    def test_formatted_parameter_names(self):
+        result = Runtime({}).run(
+            'def policy():\n    obj="a"\n    return f"height_{obj}"\n'
+        )
+        self.assertEqual(result, "height_a")
+
     def test_helper_feedback_and_comprehension(self):
         state = {"a": 0, "b": 0}
         calls = []

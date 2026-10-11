@@ -10,10 +10,11 @@ You may define helpers or call missing helpers that will be generated later.
 Allowed Python: def, local variables, if, for, while, break, continue, return,
 assert, list/tuple/dict, comprehensions, ordinary arithmetic/comparisons.
 Builtins: all, any, len, range, enumerate, list, tuple, reversed, zip, next,
-min, max, abs, bool, int, float, dict, sorted, sum, ValueError, RuntimeError.
+min, max, abs, bool, int, float, str, dict, sorted, sum, ValueError, RuntimeError.
 List methods: append, extend, pop, index, remove, copy, reverse, insert, sort, count.
 Dict methods: get, keys, values, items, copy. Tuple: index, count.
-Lambda functions are allowed for local computations or sorting keys.
+Lambda functions are allowed for local computations or sorting keys. F-strings
+are allowed for messages and parameter names, not hidden coordinate access.
 No imports, numpy, classes, try/except, raw env, raw coordinates,
 image access, files, exec/eval, or direct simulator access.
 Do not reuse an API name as a variable, parameter name, or helper name.
@@ -117,6 +118,21 @@ def task_prompt(task):
     return (
         COMMON
         + (ROW if task in ROW_TASKS else TOWER)
-        + "\nTask:\n"
+        + "\nInitial scene:\n"
+        + INITIAL_SCENES[task]
+        + "\nRequired final result:\n"
         + DESCRIPTIONS[task]
     )
+
+
+INITIAL_SCENES = {
+    "stack": "Every object initially rests separately on the table, pairwise Scattered. They are NOT already in a tower. The supplied base is the required final bottom object.",
+    "unstack": "Every object initially belongs to one supported tower, with supplied base at its bottom. There is initially NO separate table block to use as a destination; choose empty table locations via offsets from an unmoved reference.",
+    "reverse": "Every object initially belongs to one supported tower, with supplied base at its bottom. The final bottom must be the original top object, not necessarily base.",
+    "partial_stack": "There are two separated supported towers. All objects must be combined. The supplied base is the required final bottom but may initially be inside one tower, with blocks above AND below it.",
+    "tower_merge": "There are two separated supported towers, rooted at supplied root_a and root_b. The A tower must not move. Identify each tower's members and order through on_star_zero, not objects() order.",
+    "tower_split": "There is one supported tower. Supplied cut is inside it, not necessarily its top. The portion strictly below cut must not move; cut and its initial successors must form a new, separate tower.",
+    "insertion_sort": "Every fixed row slot is occupied, buffer empty. Initial key order is arbitrary and may contain duplicates or negative values. Recover spatial order with next_star, not objects() order.",
+    "stable_merge": "Every fixed row slot is occupied, buffer empty. The left half (len(objects())//2 slots) and remaining right half are independently nondecreasing by key; duplicates are possible. Recover spatial order with next_star.",
+    "sort_restore": "Every fixed row slot is occupied, buffer empty, initial key order arbitrary. Save the ORIGINAL object order through next_star before moving anything. Equal keys must retain their original order in the sorted checkpoint.",
+}
